@@ -1,0 +1,115 @@
+# ============================================
+# SH-LAB .gitignore
+# ============================================
+
+# ============================================
+# Environment & Secrets
+# ============================================
+.env
+.env.local
+.env.*.local
+*.pem
+secrets/
+
+# ============================================
+# Python / Backend
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ============================================
+# Node.js / Frontend
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+.vite/
+*.local
+
+# ============================================
+# Rust / Tauri
+# ============================================
+frontend/src-tauri/target/
+*.rs.bk
+Cargo.lock
+
+# ============================================
+# IDE & Editor
+# ============================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# ============================================
+# OS Generated
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ============================================
+# Docker / Data
+# ============================================
+data/
+test library/
+
+# ============================================
+# Temporary / Generated
+# ============================================
+*.log
+*.tmp
+*.temp
+temp_body.json
+*.bak
+*.orig
+
+# ============================================
+# Build Artifacts
+# ============================================
+*.exe
+*.dll
+*.msi
+*.dmg
+*.app
+*.deb
+*.rpm
+*.AppImage

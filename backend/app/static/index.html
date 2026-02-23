@@ -1,0 +1,2054 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>sh_lab Admin</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #0f0f12;
+            color: #e4e4e7;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            margin: 0 0 20px 0;
+            font-size: 1.4em;
+            color: #a1a1aa;
+            font-weight: normal;
+        }
+
+        /* Login Form */
+        #login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 40px;
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+        }
+
+        #login-container h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid #27272a;
+            padding-bottom: 4px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: transparent;
+            border: none;
+            color: #71717a;
+            cursor: pointer;
+            font-size: 14px;
+            border-radius: 6px 6px 0 0;
+        }
+
+        .tab.active {
+            background: #27272a;
+            color: #fff;
+        }
+
+        .tab:hover {
+            color: #fff;
+        }
+
+        /* Cards */
+        .card {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .card h3 {
+            margin: 0 0 12px 0;
+            color: #fff;
+            font-size: 1.1em;
+        }
+
+        .card p {
+            color: #71717a;
+            font-size: 13px;
+            margin: 0 0 16px 0;
+        }
+
+        .card.danger {
+            border-color: #450a0a;
+            background: #1a0808;
+        }
+
+        .card.danger h3 {
+            color: #f87171;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: #a1a1aa;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="email"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px 12px;
+            background: #09090b;
+            border: 1px solid #27272a;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        /* Buttons */
+        button,
+        .btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.danger {
+            background: #dc2626;
+        }
+
+        button.danger:hover {
+            background: #b91c1c;
+        }
+
+        button.secondary {
+            background: #27272a;
+        }
+
+        button.secondary:hover {
+            background: #3f3f46;
+        }
+
+        button.success {
+            background: #16a34a;
+        }
+
+        button.success:hover {
+            background: #15803d;
+        }
+
+        button.small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #27272a;
+        }
+
+        th {
+            color: #71717a;
+            font-weight: 500;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        td {
+            font-size: 14px;
+        }
+
+        tr:hover {
+            background: #1f1f23;
+        }
+
+        /* Search */
+        .search-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .search-bar input {
+            flex: 1;
+        }
+
+        /* Output */
+        pre {
+            background: #09090b;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            border: 1px solid #27272a;
+            color: #22c55e;
+            font-size: 12px;
+            margin-top: 12px;
+            display: none;
+            max-height: 300px;
+        }
+
+        /* Status badges */
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            display: inline-block;
+        }
+
+        .badge.admin {
+            background: #7c3aed;
+            color: white;
+        }
+
+        .badge.active {
+            background: #22c55e;
+            color: white;
+        }
+
+        .badge.inactive {
+            background: #ef4444;
+            color: white;
+        }
+
+        .badge.manual {
+            background: #6b7280;
+            color: white;
+        }
+
+        .badge.steam {
+            background: #1b2838;
+            color: white;
+        }
+
+        .badge.torrent {
+            background: #f59e0b;
+            color: black;
+        }
+
+        /* Hidden */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .user-info {
+            color: #71717a;
+            font-size: 13px;
+        }
+
+        /* Tab content */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .modal {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal h3 {
+            margin: 0 0 20px 0;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        /* Game cover */
+        .game-cover {
+            width: 60px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 4px;
+            background: #27272a;
+        }
+
+        .game-cover-placeholder {
+            width: 60px;
+            height: 80px;
+            background: #27272a;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #52525b;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Login Screen -->
+    <div id="login-container">
+        <h1>🎮 sh_lab Admin</h1>
+        <form id="login-form">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="login-username" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="login-password" required autocomplete="current-password">
+            </div>
+            <button type="submit" style="width: 100%; margin-top: 10px;">Login</button>
+            <p id="login-error" style="color: #ef4444; text-align: center; margin-top: 16px;"></p>
+        </form>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboard" class="hidden">
+        <div class="container">
+            <div class="header">
+                <div>
+                    <h1>🎮 sh_lab Admin</h1>
+                    <h2>Backend Administration Dashboard</h2>
+                </div>
+                <div class="header-right">
+                    <span class="user-info">Logged in as <strong id="current-user">admin</strong></span>
+                    <button class="secondary small" onclick="logout()">Logout</button>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('games')">Games</button>
+                <button class="tab" onclick="showTab('users')">Users</button>
+                <button class="tab" onclick="showTab('steam')">Steam</button>
+                <button class="tab" onclick="showTab('reviews')">Reviews</button>
+                <button class="tab" onclick="showTab('news')">News</button>
+                <button class="tab" onclick="showTab('config')">Settings</button>
+            </div>
+
+            <!-- Games Tab -->
+            <div id="tab-games" class="tab-content active">
+                <div class="card">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3 style="margin: 0;">Game Catalog</h3>
+                        <div class="btn-group">
+                            <button class="secondary" onclick="scanRepo()">🔍 Scan Repository</button>
+                            <button onclick="showCreateGameModal()">+ Add Game</button>
+                        </div>
+                    </div>
+
+                    <div class="search-bar">
+                        <input type="text" id="game-search" placeholder="Search games..." onkeyup="debounceSearch()">
+                        <button class="secondary" onclick="loadGames()">Search</button>
+                    </div>
+
+                    <table id="games-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 70px;">Cover</th>
+                                <th>Title</th>
+                                <th>Source</th>
+                                <th>IGDB</th>
+                                <th style="width: 200px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="games-tbody"></tbody>
+                    </table>
+                </div>
+
+                <div class="card danger">
+                    <h3>Danger Zone</h3>
+                    <p>Clear all games from the database. Files are not deleted.</p>
+                    <button class="danger" onclick="clearCatalog()">Clear Catalog</button>
+                    <pre id="clear-output" style="color: #f87171;"></pre>
+                </div>
+            </div>
+
+            <!-- Users Tab -->
+            <div id="tab-users" class="tab-content">
+                <div class="card">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3 style="margin: 0;">User Management</h3>
+                        <button onclick="showCreateUserModal()">+ Add User</button>
+                    </div>
+                    <table id="users-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Username</th>
+                                <th>Display Name</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Steam Tab -->
+            <div id="tab-steam" class="tab-content">
+                <div class="card">
+                    <h3>🎮 Steam Integration</h3>
+                    <p>Configure Steam API access for enriching game metadata with screenshots, videos, and more.</p>
+
+                    <div class="form-group" style="margin-top:20px;">
+                        <label>Steam Web API Key</label>
+                        <div style="display:flex;gap:8px;">
+                            <input type="password" id="steam-api-key" placeholder="Enter your Steam API key">
+                            <button class="secondary" onclick="saveSteamApiKey()">Save</button>
+                        </div>
+                        <small style="color:#71717a;">Get your key at <a href="https://steamcommunity.com/dev/apikey"
+                                target="_blank" style="color:#3b82f6;">steamcommunity.com/dev/apikey</a></small>
+                    </div>
+
+                    <div class="form-row" style="margin-top:20px;">
+                        <div class="form-group">
+                            <label>Steam Username (for SteamCMD)</label>
+                            <input type="text" id="steam-username" placeholder="Your Steam username">
+                        </div>
+                        <div class="form-group">
+                            <label>Steam Password</label>
+                            <input type="password" id="steam-password" placeholder="Your Steam password">
+                        </div>
+                    </div>
+                    <button class="secondary" onclick="saveSteamCredentials()">Save Steam Credentials</button>
+                </div>
+
+                <div class="card">
+                    <h3>⚙️ SteamCMD (License Fetcher)</h3>
+                    <p>SteamCMD is used for downloading games and fetching app info directly from Steam.</p>
+                    <div id="steamcmd-status"
+                        style="margin: 16px 0; padding: 12px; background: #09090b; border-radius: 6px;">
+                        Loading status...
+                    </div>
+                    <div class="btn-group">
+                        <button onclick="downloadSteamCMD()">📥 Download SteamCMD</button>
+                        <button class="secondary" onclick="checkSteamCMDStatus()">🔄 Refresh Status</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>🔐 Steam Guard & Login Test</h3>
+                    <p>Test your Steam credentials and authenticate with Steam Guard (Email/Mobile 2FA).</p>
+                    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                        <input type="text" id="steam-guard-code" placeholder="Steam Guard Code (Optional)"
+                            style="max-width: 200px;">
+                        <button onclick="testSteamLogin()">Test Login</button>
+                    </div>
+
+                    <div id="login-output-container" style="display:none;">
+                        <div style="margin-bottom:8px; font-weight:bold; color: #a1a1aa; font-size: 0.9em;">Output:
+                        </div>
+                        <pre id="login-output"
+                            style="display:block; max-height:200px; color:#bbbbbb; background:#09090b; border:1px solid #27272a; padding:12px; overflow:auto;"></pre>
+                        <div id="login-result-msg" style="margin-top:8px;"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>📊 Enrich Metadata (Slow Lane)</h3>
+                    <p>Fetches rich HTML descriptions, high-res screenshots, and Metacritic scores. Slow but
+                        comprehensive (Hybrid Workflow).</p>
+                    <div class="btn-group">
+                        <button class="success" onclick="enrichAllGames(false)">🐢 Full Enrich (Rich Data)</button>
+                        <button class="secondary" onclick="enrichAllGames(true)">⚡ Fast Enrich (IGDB Only)</button>
+                    </div>
+                    <div style="margin-top: 8px;">
+                        <label
+                            style="font-size: 13px; color: #a1a1aa; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                            <input type="checkbox" id="force-update-checkbox"> Force update existing games (Slower)
+                        </label>
+                    </div>
+                    <pre id="enrich-output"></pre>
+                </div>
+
+                <div class="card">
+                    <h3>📥 Import Owned Games (Fast Lane)</h3>
+                    <p>Fetches licenses via SteamCMD (User) and metadata via PICS (Anonymous/Instant). Resulting
+                        metadata is basic.</p>
+                    <!-- ... lines ... -->
+
+                    <div id="import-status"
+                        style="margin: 16px 0; padding: 12px; background: #09090b; border-radius: 6px; display: none;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="spinner"
+                                style="width: 20px; height: 20px; border: 2px solid #3b82f6; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;">
+                            </div>
+                            <span id="import-status-text">Importing...</span>
+                        </div>
+                        <div id="import-progress" style="margin-top: 8px; font-size: 0.9em; color: #71717a;"></div>
+                    </div>
+                    <div id="import-result"
+                        style="margin: 16px 0; padding: 12px; background: #09090b; border-radius: 6px; display: none;">
+                    </div>
+                    <div class="btn-group">
+                        <button class="success" onclick="importSteamLicenses()">🚀 Fast Import</button>
+                        <button class="secondary" onclick="checkImportStatus()">🔄 Check Status</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>🔍 Search & Add Games</h3>
+                    <p>Search the Steam store to manually add games to your catalog.</p>
+                    <div class="form-group">
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="game-search-input" placeholder="Search for games..."
+                                style="flex: 1;">
+                            <button onclick="searchSteamGames()">🔍 Search</button>
+                        </div>
+                    </div>
+                    <div id="search-results" style="margin-top: 16px;"></div>
+                </div>
+            </div>
+
+            <!-- Reviews Tab -->
+            <div id="tab-reviews" class="tab-content">
+                <div class="card">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3 style="margin: 0;">Review Moderation</h3>
+                        <button class="secondary" onclick="loadReviews()">🔄 Refresh</button>
+                    </div>
+                    <table id="reviews-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">ID</th>
+                                <th>User</th>
+                                <th>Game</th>
+                                <th>Rating</th>
+                                <th>Content</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th style="width: 150px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reviews-tbody"></tbody>
+                    </table>
+                    <div class="pagination" style="margin-top: 16px; display: flex; justify-content: center; gap: 8px;">
+                        <button class="secondary small" onclick="prevReviewsPage()">Previous</button>
+                        <span id="reviews-page-num" style="align-self: center; color: #a1a1aa;">Page 1</span>
+                        <button class="secondary small" onclick="nextReviewsPage()">Next</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- News Tab -->
+            <div id="tab-news" class="tab-content">
+                <div class="card">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3 style="margin: 0;">News & Announcements</h3>
+                        <div class="btn-group">
+                            <button class="secondary" onclick="loadNews()">🔄 Refresh</button>
+                            <button onclick="showCreateNewsModal()">+ New Post</button>
+                        </div>
+                    </div>
+                    <table id="news-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">ID</th>
+                                <th>Title</th>
+                                <th>Author</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th style="width: 180px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="news-tbody"></tbody>
+                    </table>
+                    <div class="pagination" style="margin-top: 16px; display: flex; justify-content: center; gap: 8px;">
+                        <button class="secondary small" onclick="prevNewsPage()">Previous</button>
+                        <span id="news-page-num" style="align-self: center; color: #a1a1aa;">Page 1</span>
+                        <button class="secondary small" onclick="nextNewsPage()">Next</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Config Tab -->
+            <div id="tab-config" class="tab-content">
+                <div class="card">
+                    <h3>System Configuration</h3>
+                    <p>Manage application settings. Secret values are masked.</p>
+                    <table id="config-table">
+                        <thead>
+                            <tr>
+                                <th>Key</th>
+                                <th>Value</th>
+                                <th>Type</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="config-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div id="create-user-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>Create New User</h3>
+            <form id="create-user-form">
+                <div class="form-group">
+                    <label>Username *</label>
+                    <input type="text" id="new-username" required>
+                </div>
+                <div class="form-group">
+                    <label>Password *</label>
+                    <input type="password" id="new-password" required>
+                </div>
+                <div class="form-group">
+                    <label>Display Name</label>
+                    <input type="text" id="new-display-name">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="new-email">
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="new-is-admin"> Admin User</label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="secondary" onclick="hideModal('create-user-modal')">Cancel</button>
+                    <button type="submit">Create User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create/Edit News Modal -->
+    <div id="news-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width: 800px;">
+            <h3 id="news-modal-title">Create News Post</h3>
+            <form id="news-form">
+                <input type="hidden" id="news-id">
+
+                <div class="form-group">
+                    <label>Title *</label>
+                    <input type="text" id="news-title" required placeholder="Update functionality...">
+                </div>
+
+                <div class="form-group">
+                    <label>Excerpt (Short summary)</label>
+                    <textarea id="news-excerpt" style="min-height: 60px;"
+                        placeholder="Brief summary for card view..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Content (Markdown supported) *</label>
+                    <textarea id="news-content" style="min-height: 300px; font-family: monospace;" required
+                        placeholder="# Header\n\nContent..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Cover Image URL</label>
+                        <input type="text" id="news-cover" placeholder="https://...">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Tags</label>
+                    <div id="news-tags-container" style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px;">
+                        <label
+                            style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: #27272a; padding: 6px 12px; border-radius: 4px;">
+                            <input type="checkbox" name="news-tag" value="Update"> Update
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: #27272a; padding: 6px 12px; border-radius: 4px;">
+                            <input type="checkbox" name="news-tag" value="Feature"> Feature
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: #27272a; padding: 6px 12px; border-radius: 4px;">
+                            <input type="checkbox" name="news-tag" value="Maintenance"> Maintenance
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: #27272a; padding: 6px 12px; border-radius: 4px;">
+                            <input type="checkbox" name="news-tag" value="Community"> Community
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 20px; border-top: 1px solid #27272a; padding-top: 16px;">
+                    <label style="margin-bottom: 8px; color: #fff;">Image Manager</label>
+                    <div class="tabs" style="margin-bottom: 12px;">
+                        <button type="button" class="tab active" onclick="switchImageTab('upload')">Upload</button>
+                        <button type="button" class="tab" onclick="switchImageTab('gallery')">Gallery</button>
+                        <button type="button" class="tab" onclick="switchImageTab('admin')">Presets</button>
+                    </div>
+
+                    <div id="img-tab-upload" class="tab-content active">
+                        <div style="border: 2px dashed #3f3f46; border-radius: 8px; padding: 20px; text-align: center;">
+                            <p style="margin-bottom: 12px; color: #a1a1aa;">Drag & drop or select an image</p>
+                            <input type="file" id="news-image-input" accept="image/*" style="display: none;"
+                                onchange="handleImageSelect(this)">
+                            <button type="button" class="secondary"
+                                onclick="document.getElementById('news-image-input').click()">Select File</button>
+                            <div id="upload-preview" style="margin-top: 12px; display: none;">
+                                <span id="upload-filename" style="color: #fff; margin-right: 8px;"></span>
+                                <button type="button" class="success small" onclick="uploadNewsImage()">Upload
+                                    Now</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="img-tab-gallery" class="tab-content" style="display: none;">
+                        <div id="news-gallery-grid"
+                            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; max-height: 200px; overflow-y: auto;">
+                            <!-- Images loaded via JS -->
+                        </div>
+                    </div>
+
+                    <div id="img-tab-admin" class="tab-content" style="display: none;">
+                        <div id="news-admin-grid"
+                            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; max-height: 200px; overflow-y: auto;">
+                            <!-- Images loaded via JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" id="news-pinned"> 📌 Pin this post to top
+                    </label>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="secondary" onclick="hideModal('news-modal')">Cancel</button>
+                    <button type="submit">Save Post</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create/Edit Game Modal -->
+    <div id="game-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3 id="game-modal-title">Add New Game</h3>
+            <form id="game-form">
+                <input type="hidden" id="game-id">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Title *</label>
+                        <input type="text" id="game-title" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Source</label>
+                        <select id="game-source">
+                            <option value="manual">Manual</option>
+                            <option value="steam">Steam</option>
+                            <option value="torrent">Torrent</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="game-description"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Developer</label>
+                        <input type="text" id="game-developer">
+                    </div>
+                    <div class="form-group">
+                        <label>Publisher</label>
+                        <input type="text" id="game-publisher">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Steam App ID</label>
+                        <input type="number" id="game-steam-id">
+                    </div>
+                    <div class="form-group">
+                        <label>IGDB ID</label>
+                        <input type="number" id="game-igdb-id">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Genres (comma-separated)</label>
+                    <input type="text" id="game-genres" placeholder="Action, Adventure, RPG">
+                </div>
+
+                <div class="form-group">
+                    <label>Tags (comma-separated)</label>
+                    <input type="text" id="game-tags" placeholder="Multiplayer, Co-op, Sandbox">
+                </div>
+
+                <div class="form-group">
+                    <label>Executable Path</label>
+                    <input type="text" id="game-executable" placeholder="/path/to/game.exe">
+                </div>
+
+                <div class="form-group">
+                    <label>Launch Arguments</label>
+                    <input type="text" id="game-args" placeholder="-windowed -novid">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Cover URL</label>
+                        <input type="text" id="game-cover">
+                    </div>
+                    <div class="form-group">
+                        <label>Version</label>
+                        <input type="text" id="game-version">
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="secondary" onclick="hideModal('game-modal')">Cancel</button>
+                    <button type="submit" id="game-submit-btn">Save Game</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Setup Wizard Modal (First Run) -->
+    <div id="setup-wizard" class="modal-overlay hidden">
+        <div class="modal" style="max-width: 500px;">
+            <h3>🎮 Welcome to sh_lab!</h3>
+            <p style="color: #a1a1aa; margin-bottom: 20px;">Let's set up your admin account to get started.</p>
+
+            <form id="setup-form">
+                <div class="form-group">
+                    <label>Admin Username *</label>
+                    <input type="text" id="setup-username" required placeholder="admin">
+                </div>
+                <div class="form-group">
+                    <label>Admin Password *</label>
+                    <input type="password" id="setup-password" required placeholder="Create a strong password">
+                </div>
+                <div class="form-group">
+                    <label>Email (optional)</label>
+                    <input type="email" id="setup-email" placeholder="admin@example.com">
+                </div>
+
+                <hr style="border-color: #27272a; margin: 24px 0;">
+                <p style="color: #71717a; font-size: 13px; margin-bottom: 8px;">Steam Integration</p>
+                <div id="env-var-notice"
+                    style="background: #27272a; padding: 10px; border-radius: 6px; font-size: 12px; color: #a1a1aa; margin-bottom: 16px; display: none;">
+                    ℹ️ Some settings are already configured via Environment Variables. You can leave those fields empty.
+                </div>
+
+                <div class="form-group">
+                    <label>Steam Web API Key</label>
+                    <input type="text" id="setup-steam-key" placeholder="Get from steamcommunity.com/dev/apikey">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Steam Username</label>
+                        <input type="text" id="setup-steam-user" placeholder="For SteamCMD">
+                    </div>
+                    <div class="form-group">
+                        <label>Steam Password</label>
+                        <input type="password" id="setup-steam-pass" placeholder="For SteamCMD">
+                    </div>
+                </div>
+
+                <button type="submit" style="width: 100%; margin-top: 16px;">Complete Setup</button>
+                <p id="setup-error" style="color: #ef4444; text-align: center; margin-top: 12px;"></p>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let authToken = localStorage.getItem('sh_admin_token') || '';
+        let searchTimeout;
+
+        // Check if setup is needed on page load
+        checkSetupStatus();
+
+        async function checkSetupStatus() {
+            try {
+                const res = await fetch('/api/v1/setup/check');
+                if (res.ok) {
+                    const status = await res.json();
+
+                    // Handle env var hints
+                    let hasEnv = false;
+                    if (status.steam_api_key_configured) {
+                        document.getElementById('setup-steam-key').placeholder = 'Configured via Environment Variable';
+                        document.getElementById('setup-steam-key').disabled = true;
+                        document.getElementById('setup-steam-key').style.opacity = '0.5';
+                        hasEnv = true;
+                    }
+                    if (status.steam_username_configured) {
+                        document.getElementById('setup-steam-user').placeholder = 'Configured via Env';
+                        document.getElementById('setup-steam-user').disabled = true;
+                        document.getElementById('setup-steam-user').style.opacity = '0.5';
+                        hasEnv = true;
+                    }
+                    if (status.steam_password_configured) {
+                        document.getElementById('setup-steam-pass').placeholder = 'Configured via Env';
+                        document.getElementById('setup-steam-pass').disabled = true;
+                        document.getElementById('setup-steam-pass').style.opacity = '0.5';
+                        hasEnv = true;
+                    }
+
+                    if (hasEnv) {
+                        document.getElementById('env-var-notice').style.display = 'block';
+                    }
+
+                    if (!status.setup_complete || !status.has_admin) {
+                        // Show setup wizard
+                        document.getElementById('setup-wizard').classList.remove('hidden');
+                        document.getElementById('login-container').classList.add('hidden');
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.error('Setup check failed:', e);
+            }
+            // Setup complete, proceed with normal auth check
+            if (authToken) { checkAuth(); }
+        }
+
+        // Setup form submission
+        document.getElementById('setup-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const errorEl = document.getElementById('setup-error');
+            errorEl.textContent = '';
+
+            const username = document.getElementById('setup-username').value;
+            const password = document.getElementById('setup-password').value;
+            const email = document.getElementById('setup-email').value || null;
+            const steamApiKey = document.getElementById('setup-steam-key').value || null;
+            const steamUsername = document.getElementById('setup-steam-user').value || null;
+            const steamPassword = document.getElementById('setup-steam-pass').value || null;
+
+            try {
+                const res = await fetch('/api/v1/setup/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        email: email,
+                        steam_api_key: steamApiKey,
+                        steam_username: steamUsername,
+                        steam_password: steamPassword
+                    })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    // Auto-login with returned token
+                    authToken = data.access_token;
+                    localStorage.setItem('sh_admin_token', authToken);
+                    document.getElementById('setup-wizard').classList.add('hidden');
+                    checkAuth();
+                } else {
+                    const err = await res.json();
+                    errorEl.textContent = err.detail || 'Setup failed';
+                }
+            } catch (e) {
+                errorEl.textContent = 'Connection error';
+            }
+        };
+
+        async function checkAuth() {
+            try {
+                const res = await fetchWithAuth('/api/v1/auth/me');
+                if (res.ok) {
+                    const user = await res.json();
+                    if (user.is_admin) { showDashboard(user); }
+                    else { alert('Admin access required'); logout(); }
+                } else { logout(); }
+            } catch (e) { logout(); }
+        }
+
+        document.getElementById('login-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            try {
+                const res = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    authToken = data.access_token;
+                    localStorage.setItem('sh_admin_token', authToken);
+                    checkAuth();
+                } else {
+                    const err = await res.json();
+                    document.getElementById('login-error').textContent = err.detail || 'Login failed';
+                }
+            } catch (e) {
+                document.getElementById('login-error').textContent = 'Connection error';
+            }
+        };
+
+        function logout() {
+            authToken = '';
+            localStorage.removeItem('sh_admin_token');
+            document.getElementById('login-container').classList.remove('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
+        }
+
+        function showDashboard(user) {
+            document.getElementById('login-container').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+            document.getElementById('current-user').textContent = user.display_name || user.username;
+            loadGames();
+            loadUsers();
+            loadConfig();
+        }
+
+        function fetchWithAuth(url, options = {}) {
+            return fetch(url, {
+                ...options,
+                headers: { ...options.headers, 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' }
+            });
+        }
+
+        function showTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`[onclick="showTab('${name}')"]`).classList.add('active');
+            document.getElementById(`tab-${name}`).classList.add('active');
+        }
+
+        function hideModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        // ============================================================
+        // Games
+        // ============================================================
+
+        function debounceSearch() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(loadGames, 300);
+        }
+
+        async function loadGames() {
+            const search = document.getElementById('game-search').value;
+
+            const stripHtml = (html) => {
+                if (!html) return "";
+                const tmp = document.createElement("DIV");
+                tmp.innerHTML = html;
+                return tmp.textContent || tmp.innerText || "";
+            };
+
+            try {
+                const url = `/api/v1/admin/games?limit=100${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+                const res = await fetchWithAuth(url);
+                const games = await res.json();
+                const tbody = document.getElementById('games-tbody');
+                tbody.innerHTML = games.map(g => {
+                    const imgUrl = g.cover_url || g.header_image;
+                    const desc = g.description ? stripHtml(g.description).substring(0, 100) + '...' : 'No description';
+
+                    return `
+                    <tr>
+                        <td>
+                            <div style="position: relative; width: 60px; height: 80px;">
+                                ${imgUrl ?
+                            `<img src="${imgUrl}" class="game-cover" alt="" 
+                                        style="width: 100%; height: 100%; object-fit: cover; display: block;"
+                                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">`
+                            : ''}
+                                <div class="game-cover-placeholder" 
+                                     style="width: 100%; height: 100%; display: ${imgUrl ? 'none' : 'flex'}; 
+                                            align-items: center; justify-content: center; background: #27272a; 
+                                            border-radius: 4px; font-size: 24px; color: #52525b; position: absolute; top: 0; left: 0;">
+                                    ${g.title.charAt(0)}
+                                </div>
+                            </div>
+                        </td>
+                        <td><strong>${g.title}</strong><br><small style="color:#71717a">${desc}</small></td>
+                        <td><span class="badge ${g.source || 'manual'}">${g.source || 'manual'}</span></td>
+                        <td>${g.igdb_id ? `✓ ${g.igdb_id}` : '-'}</td>
+                        <td>
+                            <div class="btn-group">
+                                <button class="secondary small" onclick="editGame(${g.id})">Edit</button>
+                                <button class="success small" onclick="refetchIGDB(${g.id})">IGDB</button>
+                                <button class="danger small" onclick="deleteGame(${g.id}, '${g.title.replace(/'/g, "\\'")}')">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                `}).join('');
+            } catch (e) { console.error('Failed to load games', e); }
+        }
+
+        function showCreateGameModal() {
+            document.getElementById('game-modal-title').textContent = 'Add New Game';
+            document.getElementById('game-form').reset();
+            document.getElementById('game-id').value = '';
+            document.getElementById('game-modal').classList.remove('hidden');
+        }
+
+        async function editGame(gameId) {
+            try {
+                const res = await fetchWithAuth(`/api/v1/admin/games/${gameId}`);
+                const game = await res.json();
+
+                document.getElementById('game-modal-title').textContent = 'Edit Game';
+                document.getElementById('game-id').value = game.id;
+                document.getElementById('game-title').value = game.title || '';
+                document.getElementById('game-description').value = game.description || '';
+                document.getElementById('game-source').value = game.source || 'manual';
+                document.getElementById('game-developer').value = game.developer || '';
+                document.getElementById('game-publisher').value = game.publisher || '';
+                document.getElementById('game-steam-id').value = game.steam_app_id || '';
+                document.getElementById('game-igdb-id').value = game.igdb_id || '';
+                document.getElementById('game-genres').value = (game.genres || []).join(', ');
+                document.getElementById('game-tags').value = (game.tags || []).join(', ');
+                document.getElementById('game-executable').value = game.executable_path || '';
+                document.getElementById('game-args').value = game.launch_args || '';
+                document.getElementById('game-cover').value = game.cover_url || '';
+                document.getElementById('game-version').value = game.version || '';
+
+                document.getElementById('game-modal').classList.remove('hidden');
+            } catch (e) { alert('Failed to load game: ' + e); }
+        }
+
+        document.getElementById('game-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const gameId = document.getElementById('game-id').value;
+            const isEdit = !!gameId;
+
+            const parseList = (str) => str ? str.split(',').map(s => s.trim()).filter(s => s) : null;
+
+            const data = {
+                title: document.getElementById('game-title').value,
+                description: document.getElementById('game-description').value || null,
+                source: document.getElementById('game-source').value,
+                developer: document.getElementById('game-developer').value || null,
+                publisher: document.getElementById('game-publisher').value || null,
+                steam_app_id: parseInt(document.getElementById('game-steam-id').value) || null,
+                genres: parseList(document.getElementById('game-genres').value),
+                tags: parseList(document.getElementById('game-tags').value),
+                executable_path: document.getElementById('game-executable').value || null,
+                launch_args: document.getElementById('game-args').value || null
+            };
+
+            if (isEdit) {
+                data.igdb_id = parseInt(document.getElementById('game-igdb-id').value) || null;
+                data.cover_url = document.getElementById('game-cover').value || null;
+                data.version = document.getElementById('game-version').value || null;
+            }
+
+            try {
+                const url = isEdit ? `/api/v1/admin/games/${gameId}` : '/api/v1/admin/games';
+                const method = isEdit ? 'PUT' : 'POST';
+                const res = await fetchWithAuth(url, { method, body: JSON.stringify(data) });
+
+                if (res.ok) {
+                    hideModal('game-modal');
+                    loadGames();
+                } else {
+                    const err = await res.json();
+                    alert(err.detail || 'Failed to save game');
+                }
+            } catch (e) { alert('Error: ' + e); }
+        };
+
+        async function deleteGame(gameId, title) {
+            if (!confirm(`Delete "${title}"?`)) return;
+            try {
+                const res = await fetchWithAuth(`/api/v1/admin/games/${gameId}`, { method: 'DELETE' });
+                if (res.ok) { loadGames(); }
+                else { const err = await res.json(); alert(err.detail || 'Failed to delete'); }
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        async function refetchIGDB(gameId) {
+            if (!confirm('Re-fetch metadata (IGDB + Steam)? This will overwrite current data.')) return;
+            try {
+                // Use rescan-metadata which does full enrichment
+                const res = await fetchWithAuth(`/api/v1/admin/games/${gameId}/rescan-metadata`, { method: 'POST' });
+                if (res.ok) {
+                    const data = await res.json();
+                    alert(data.message);
+                    loadGames();
+                } else {
+                    const err = await res.json();
+                    alert(err.detail || 'Failed to rescan metadata');
+                }
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        async function scanRepo() {
+            if (!confirm('Scan repository for new games?')) return;
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/scan-repository', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message);
+                loadGames();
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        async function clearCatalog() {
+            if (!confirm('Are you sure? This will delete ALL games from the database.')) return;
+            const output = document.getElementById('clear-output');
+            output.style.display = 'block';
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/clear-catalog', { method: 'DELETE' });
+                const data = await res.json();
+                output.textContent = JSON.stringify(data, null, 2);
+                loadGames();
+            } catch (e) { output.textContent = 'Error: ' + e; }
+        }
+
+        // ============================================================
+        // Users
+        // ============================================================
+
+        async function loadUsers() {
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/users');
+                const users = await res.json();
+                const tbody = document.getElementById('users-tbody');
+                tbody.innerHTML = users.map(u => `
+                    <tr>
+                        <td>${u.id}</td>
+                        <td>${u.username}</td>
+                        <td>${u.display_name || '-'}</td>
+                        <td>${u.is_admin ? '<span class="badge admin">Admin</span>' : 'User'}</td>
+                        <td><span class="badge ${u.is_active !== false ? 'active' : 'inactive'}">${u.is_active !== false ? 'Active' : 'Inactive'}</span></td>
+                        <td>
+                            <button class="secondary small" onclick="toggleAdmin(${u.id}, ${!u.is_admin})">${u.is_admin ? 'Remove Admin' : 'Make Admin'}</button>
+                            <button class="danger small" onclick="deleteUser(${u.id}, '${u.username}')">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) { console.error('Failed to load users', e); }
+        }
+
+        function showCreateUserModal() { document.getElementById('create-user-modal').classList.remove('hidden'); }
+
+        document.getElementById('create-user-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const data = {
+                username: document.getElementById('new-username').value,
+                password: document.getElementById('new-password').value,
+                display_name: document.getElementById('new-display-name').value || null,
+                email: document.getElementById('new-email').value || null,
+                is_admin: document.getElementById('new-is-admin').checked
+            };
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/users', { method: 'POST', body: JSON.stringify(data) });
+                if (res.ok) { hideModal('create-user-modal'); loadUsers(); document.getElementById('create-user-form').reset(); }
+                else { const err = await res.json(); alert(err.detail || 'Failed to create user'); }
+            } catch (e) { alert('Error: ' + e); }
+        };
+
+        async function toggleAdmin(userId, makeAdmin) {
+            try { await fetchWithAuth(`/api/v1/admin/users/${userId}`, { method: 'PUT', body: JSON.stringify({ is_admin: makeAdmin }) }); loadUsers(); }
+            catch (e) { alert('Error: ' + e); }
+        }
+
+        async function deleteUser(userId, username) {
+            if (!confirm(`Delete user "${username}"?`)) return;
+            try {
+                const res = await fetchWithAuth(`/api/v1/admin/users/${userId}`, { method: 'DELETE' });
+                if (res.ok) { loadUsers(); } else { const err = await res.json(); alert(err.detail || 'Failed to delete user'); }
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        // ============================================================
+        // Config
+        // ============================================================
+
+        async function loadConfig() {
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/config');
+                const configs = await res.json();
+                const tbody = document.getElementById('config-tbody');
+                tbody.innerHTML = configs.map(c => `
+                    <tr>
+                        <td><code>${c.key}</code></td>
+                        <td>${c.is_secret ? '<em style="color:#71717a">***</em>' : (c.value || '-')}</td>
+                        <td>${c.value_type}</td>
+                        <td><button class="secondary small" onclick="editConfig('${c.key}', ${c.is_secret})">Edit</button></td>
+                    </tr>
+                `).join('');
+            } catch (e) { console.error('Failed to load config', e); }
+        }
+
+        async function editConfig(key, isSecret) {
+            const newValue = prompt(`Enter new value for "${key}":`);
+            if (newValue === null) return;
+            try { await fetchWithAuth(`/api/v1/admin/config/${key}?value=${encodeURIComponent(newValue)}`, { method: 'PUT' }); loadConfig(); }
+            catch (e) { alert('Error: ' + e); }
+        }
+
+        // ============================================================
+        // Steam Integration
+        // ============================================================
+
+        async function checkSteamCMDStatus() {
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/steamcmd/status');
+                const status = await res.json();
+                const statusDiv = document.getElementById('steamcmd-status');
+                if (status.executable_exists) {
+                    statusDiv.innerHTML = `<span style="color:#22c55e;">✓ SteamCMD installed</span><br><small style="color:#71717a;">${status.executable_path}</small>`;
+                } else {
+                    statusDiv.innerHTML = `<span style="color:#f59e0b;">⚠ SteamCMD not installed</span><br><small style="color:#71717a;">Path: ${status.path}</small>`;
+                }
+            } catch (e) {
+                document.getElementById('steamcmd-status').innerHTML = `<span style="color:#ef4444;">Error checking status</span>`;
+            }
+        }
+
+        async function downloadSteamCMD() {
+            if (!confirm('Download and install SteamCMD?')) return;
+            document.getElementById('steamcmd-status').innerHTML = '<span style="color:#3b82f6;">⏳ Downloading...</span>';
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/steamcmd/download', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    alert('SteamCMD downloaded successfully!');
+                    checkSteamCMDStatus();
+                } else {
+                    alert('Failed: ' + data.message);
+                }
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        async function saveSteamApiKey() {
+            const key = document.getElementById('steam-api-key').value;
+            try {
+                await fetchWithAuth('/api/v1/admin/config/steam_api_key?value=' + encodeURIComponent(key), { method: 'PUT' });
+                alert('Steam API key saved!');
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        async function saveSteamCredentials() {
+            const username = document.getElementById('steam-username').value;
+            const password = document.getElementById('steam-password').value;
+            try {
+                if (username) await fetchWithAuth('/api/v1/admin/config/steam_username?value=' + encodeURIComponent(username), { method: 'PUT' });
+                if (password) await fetchWithAuth('/api/v1/admin/config/steam_password?value=' + encodeURIComponent(password), { method: 'PUT' });
+                alert('Steam credentials saved!');
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        async function testSteamLogin() {
+            const code = document.getElementById('steam-guard-code').value.trim();
+            const outputPre = document.getElementById('login-output');
+            const container = document.getElementById('login-output-container');
+            const resultMsg = document.getElementById('login-result-msg');
+
+            container.style.display = 'block';
+            outputPre.textContent = 'Logging in...';
+            resultMsg.textContent = '';
+
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/steam/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ steam_guard_code: code || null })
+                });
+                const data = await res.json();
+
+                outputPre.textContent = (data.stdout || '') + '\n' + (data.stderr || '');
+
+                if (data.status === 'success') {
+                    resultMsg.innerHTML = '<span style="color:#22c55e;">✅ Login Successful! SteamCMD is authenticated.</span>';
+                } else {
+                    resultMsg.innerHTML = `<span style="color:#ef4444;">❌ Login Failed (Exit Code ${data.exit_code}). See output above.</span>`;
+                }
+            } catch (e) {
+                outputPre.textContent = 'Error: ' + e;
+            }
+        }
+
+        async function enrichSteam(gameId) {
+            if (!confirm('Fetch metadata from Steam? This will update game data.')) return;
+            try {
+                const res = await fetchWithAuth(`/api/v1/admin/games/${gameId}/enrich-steam`, { method: 'POST' });
+                if (res.ok) {
+                    alert('Game enriched with Steam data!');
+                    loadGames();
+                } else {
+                    const err = await res.json();
+                    alert(err.detail || 'Failed to enrich from Steam');
+                }
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        async function enrichAllGames(fastMode) {
+            const forceUpdate = document.getElementById('force-update-checkbox').checked;
+            const mode = fastMode ? "Fast Mode (IGDB Only)" : "Full Mode (Steam + IGDB)";
+            const skipMsg = !forceUpdate ? " (Skipping Existing)" : " (Force Update)";
+
+            if (!confirm(`Start ${mode}${skipMsg}? This runs in background.`)) return;
+
+            const output = document.getElementById('enrich-output');
+            output.style.display = 'block';
+            output.textContent = `Starting ${mode}${skipMsg}...`;
+
+            try {
+                // Use rescan-all-metadata with fast_mode and force_update params
+                const url = `/api/v1/admin/games/rescan-all-metadata?fast_mode=${fastMode}&force_update=${forceUpdate}`;
+                const res = await fetchWithAuth(url, { method: 'POST' });
+                const data = await res.json();
+                output.textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                output.textContent = 'Error: ' + e;
+            }
+        }
+
+        // Load Steam status when tab is shown
+        const origShowTab = showTab;
+        showTab = function (name) {
+            origShowTab(name);
+            if (name === 'steam') checkSteamCMDStatus();
+        };
+
+        // ============================================================
+        // Steam License Import & Search
+        // ============================================================
+
+        async function importSteamLicenses() {
+            if (!confirm('Import all owned paid games from Steam? This may take several minutes.')) return;
+
+            const statusDiv = document.getElementById('import-status');
+            const resultDiv = document.getElementById('import-result');
+            const statusText = document.getElementById('import-status-text');
+            const progressDiv = document.getElementById('import-progress');
+
+            statusDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+            statusText.textContent = 'Starting import...';
+            progressDiv.textContent = '';
+
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/steam/import-licenses', { method: 'POST' });
+                const data = await res.json();
+
+                statusDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+
+                if (res.ok) {
+                    resultDiv.innerHTML = `
+                        <div style="color:#22c55e; font-weight: bold; margin-bottom: 8px;">✓ Import Complete</div>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px;">
+                            <div>📦 Found: <strong>${data.total_found}</strong></div>
+                            <div>✅ Imported: <strong style="color:#22c55e;">${data.imported}</strong></div>
+                            <div>⏭️ Already Exist: <strong>${data.skipped_existing}</strong></div>
+                            <div>🆓 Free (skipped): <strong>${data.skipped_free}</strong></div>
+                            <div>⚠️ Invalid: <strong>${data.skipped_invalid}</strong></div>
+                            <div>❌ Errors: <strong style="color:#ef4444;">${data.errors?.length || 0}</strong></div>
+                        </div>
+                        ${data.games_added?.length ? `<div style="margin-top: 8px; color: #71717a;">Added: ${data.games_added.slice(0, 5).join(', ')}${data.games_added.length > 5 ? '...' : ''}</div>` : ''}
+                    `;
+                    loadGames();
+                } else {
+                    resultDiv.innerHTML = `<div style="color:#ef4444;">❌ ${data.detail || 'Import failed'}</div>`;
+                }
+            } catch (e) {
+                statusDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = `<div style="color:#ef4444;">❌ Error: ${e.message || e}</div>`;
+            }
+        }
+
+        async function checkImportStatus() {
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/steam/import-licenses/status');
+                const status = await res.json();
+
+                const statusDiv = document.getElementById('import-status');
+                const statusText = document.getElementById('import-status-text');
+                const progressDiv = document.getElementById('import-progress');
+
+                if (status.running) {
+                    statusDiv.style.display = 'block';
+                    statusText.textContent = status.phase || 'Running...';
+                    progressDiv.textContent = status.total ? `Progress: ${status.progress}/${status.total}` : '';
+                } else if (status.phase === 'Complete') {
+                    statusDiv.style.display = 'none';
+                    alert('Import completed!');
+                } else if (status.error) {
+                    statusDiv.style.display = 'none';
+                    alert('Import error: ' + status.error);
+                } else {
+                    statusDiv.style.display = 'none';
+                    alert('No import running');
+                }
+            } catch (e) {
+                alert('Error checking status: ' + e);
+            }
+        }
+
+        let searchDebounce;
+        async function searchSteamGames() {
+            const query = document.getElementById('game-search-input').value.trim();
+            const resultsDiv = document.getElementById('search-results');
+
+            if (!query || query.length < 2) {
+                resultsDiv.innerHTML = '<span style="color:#71717a;">Enter at least 2 characters to search</span>';
+                return;
+            }
+
+            resultsDiv.innerHTML = '<span style="color:#3b82f6;">🔍 Searching...</span>';
+
+            try {
+                const res = await fetchWithAuth(`/api/v1/admin/games/search?query=${encodeURIComponent(query)}&limit=10`);
+                const data = await res.json();
+
+                if (!data.results || data.results.length === 0) {
+                    resultsDiv.innerHTML = '<span style="color:#71717a;">No games found</span>';
+                    return;
+                }
+
+                resultsDiv.innerHTML = data.results.map(game => `
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: #18181b; border-radius: 8px; margin-bottom: 8px;">
+                        <img src="${game.icon || ''}" alt="" style="width: 40px; height: 40px; border-radius: 4px; background: #27272a;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500;">${game.name}</div>
+                            <div style="font-size: 0.85em; color: #71717a;">App ID: ${game.appid}</div>
+                        </div>
+                        <button class="success small" onclick="addGameByAppId(${game.appid}, '${game.name.replace(/'/g, "\\'")}')">+ Add</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                resultsDiv.innerHTML = `<span style="color:#ef4444;">Error: ${e.message || e}</span>`;
+            }
+        }
+
+        // Review Management
+        let currentReviewsPage = 1;
+
+        async function loadReviews(page = 1) {
+            currentReviewsPage = page;
+            const tbody = document.getElementById('reviews-tbody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 20px;">Loading...</td></tr>';
+
+                try {
+                    const res = await fetchWithAuth(`/api/v1/reviews/admin/all?page=${page}&limit=20`);
+                    if (!res.ok) throw new Error('Failed to load reviews');
+                    const reviews = await res.json();
+
+                    tbody.innerHTML = '';
+                    const pageNumEl = document.getElementById('reviews-page-num');
+                    if (pageNumEl) pageNumEl.textContent = `Page ${page}`;
+
+                    if (reviews.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 20px; color: #a1a1aa;">No reviews found</td></tr>';
+                        return;
+                    }
+
+                    reviews.forEach(r => {
+                        const row = document.createElement('tr');
+                        const date = new Date(r.created_at).toLocaleDateString();
+                        const status = r.is_hidden ? '<span class="badge" style="background:#ef4444; color:white;">Hidden</span>' : '<span class="badge" style="background:#22c55e; color:white;">Visible</span>';
+                        const visibilityAction = r.is_hidden
+                            ? `<button class="secondary small" onclick="toggleReviewVisibility(${r.id}, false)">Unhide</button>`
+                            : `<button class="secondary small" onclick="toggleReviewVisibility(${r.id}, true)">Hide</button>`;
+
+                        row.innerHTML = `
+                            <td>${r.id}</td>
+                            <td>
+                                <div style="font-weight:bold;">${r.display_name || r.username}</div>
+                                <div style="font-size:12px; color:#a1a1aa;">${r.username}</div>
+                            </td>
+                            <td>ID: ${r.game_id}</td>
+                            <td>⭐ ${r.rating}</td>
+                            <td style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${(r.content || '').replace(/"/g, '&quot;')}">${r.content}</td>
+                            <td>${date}</td>
+                            <td>${status}</td>
+                            <td class="actions">
+                                ${visibilityAction}
+                                <button class="danger small" onclick="deleteReview(${r.id})">Delete</button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } catch (e) {
+                    tbody.innerHTML = `<tr><td colspan="8" style="color:#ef4444; text-align:center;">Error: ${e.message}</td></tr>`;
+                }
+            }
+        }
+
+        async function toggleReviewVisibility(id, hide) {
+            try {
+                const res = await fetchWithAuth(`/api/v1/reviews/${id}/visibility?is_hidden=${hide}`, { method: 'PUT' });
+                if (res.ok) loadReviews(currentReviewsPage);
+                else {
+                    const err = await res.json();
+                    alert(err.detail || 'Failed to update visibility');
+                }
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        async function deleteReview(id) {
+            if (!confirm('Permanently delete this review?')) return;
+            try {
+                const res = await fetchWithAuth(`/api/v1/reviews/reviews/${id}`, { method: 'DELETE' });
+                if (res.ok) loadReviews(currentReviewsPage);
+                else {
+                    const err = await res.json();
+                    alert(err.detail || 'Failed to delete');
+                }
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        function prevReviewsPage() {
+            if (currentReviewsPage > 1) loadReviews(currentReviewsPage - 1);
+        }
+
+        function nextReviewsPage() {
+            loadReviews(currentReviewsPage + 1);
+        }
+
+        // Add enter key support for search
+        document.getElementById('game-search-input')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchSteamGames();
+        });
+
+        async function addGameByAppId(appId, gameName) {
+            if (!confirm(`Add "${gameName}" to your catalog?`)) return;
+
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/games/import-by-appid', {
+                    method: 'POST',
+                    body: JSON.stringify({ steam_app_id: appId })
+                });
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    alert(`✓ Added: ${data.message}`);
+                    loadGames();
+                } else if (data.status === 'skipped') {
+                    alert(`⏭️ ${data.message}`);
+                } else {
+                    alert(`❌ Failed: ${data.message || 'Unknown error'}`);
+                }
+            } catch (e) {
+                alert('Error: ' + (e.message || e));
+            }
+        }
+
+        // ============================================================
+        // News System
+        // ============================================================
+
+        let currentNewsPage = 1;
+
+        async function loadNews(page = 1) {
+            currentNewsPage = page;
+            const tbody = document.getElementById('news-tbody');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px;">Loading...</td></tr>';
+
+            try {
+                // Admin getAll is /admin/all (endpoints/news.py)
+                const res = await fetchWithAuth(`/api/v1/news/admin/all?page=${page}&limit=20`);
+
+                if (!res.ok) throw new Error('Failed to load news');
+                const posts = await res.json();
+
+                tbody.innerHTML = '';
+                document.getElementById('news-page-num').textContent = `Page ${page}`;
+
+                if (posts.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px; color: #a1a1aa;">No posts found</td></tr>';
+                    return;
+                }
+
+                posts.forEach(p => {
+                    const row = document.createElement('tr');
+                    const date = new Date(p.created_at).toLocaleDateString();
+                    const status = p.is_published
+                        ? '<span class="badge active">Published</span>'
+                        : '<span class="badge manual">Draft</span>';
+                    const pinned = p.is_pinned ? '📌 ' : '';
+
+                    const publishAction = p.is_published
+                        ? `<button class="secondary small" onclick="togglePublish(${p.id}, false)">Unpublish</button>`
+                        : `<button class="success small" onclick="togglePublish(${p.id}, true)">Publish</button>`;
+
+                    row.innerHTML = `
+                        <td>${p.id}</td>
+                        <td><strong>${pinned}${p.title}</strong></td>
+                        <td>${p.author_display_name || 'Admin'}</td>
+                        <td>${status}</td>
+                        <td>${date}</td>
+                        <td class="btn-group">
+                            <button class="secondary small" onclick="editNews(${p.id})">Edit</button>
+                            ${publishAction}
+                            <button class="danger small" onclick="deleteNews(${p.id})">Delete</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="6" style="color:#ef4444; text-align:center;">Error: ${e.message}</td></tr>`;
+            }
+        }
+
+        async function showCreateNewsModal() {
+            // Create a draft immediately to establish an ID for image uploads
+            try {
+                const res = await fetchWithAuth('/api/v1/news', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        title: "New Draft Post",
+                        content: "",
+                        is_published: false
+                    })
+                });
+
+                if (res.ok) {
+                    const post = await res.json();
+                    editNews(post.id); // Open the editor for the new draft
+                } else {
+                    alert('Failed to create draft');
+                }
+            } catch (e) {
+                alert('Error creating draft: ' + e);
+            }
+        }
+
+        async function editNews(id) {
+            try {
+                const res = await fetchWithAuth(`/api/v1/news/${id}`); // this is public GET
+                const post = await res.json();
+
+                document.getElementById('news-modal-title').textContent = 'Edit News Post';
+                document.getElementById('news-id').value = post.id;
+                document.getElementById('news-title').value = post.title;
+                document.getElementById('news-excerpt').value = post.excerpt || '';
+                document.getElementById('news-content').value = post.content || '';
+                document.getElementById('news-cover').value = post.cover_image_url || '';
+                document.getElementById('news-pinned').checked = post.is_pinned;
+
+                // Clear checkboxes first
+                document.querySelectorAll('input[name="news-tag"]').forEach(cb => cb.checked = false);
+                // Set checkboxes based on tags
+                if (post.tags) {
+                    post.tags.forEach(tag => {
+                        const cb = document.querySelector(`input[name="news-tag"][value="${tag}"]`);
+                        if (cb) cb.checked = true;
+                    });
+                }
+
+                // Reset Image Manager
+                switchImageTab('upload');
+                document.getElementById('upload-preview').style.display = 'none';
+                document.getElementById('news-image-input').value = '';
+
+                document.getElementById('news-modal').classList.remove('hidden');
+            } catch (e) { alert('Failed to load post: ' + e); }
+        }
+
+        // Image Manager Logic
+        function switchImageTab(tabName) {
+            // Hide all contents
+            ['upload', 'gallery', 'admin'].forEach(t => {
+                document.getElementById(`img-tab-${t}`).style.display = 'none';
+            });
+            // Show selected
+            document.getElementById(`img-tab-${tabName}`).style.display = 'block';
+
+            // Update tab styles
+            Array.from(document.querySelectorAll('.form-group .tabs .tab')).forEach(btn => {
+                if (btn.textContent.toLowerCase().includes(tabName === 'admin' ? 'preset' : tabName)) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            // Load content if needed
+            if (tabName === 'gallery') loadNewsImages();
+            if (tabName === 'admin') loadAdminImages();
+        }
+
+        function handleImageSelect(input) {
+            if (input.files && input.files[0]) {
+                document.getElementById('upload-preview').style.display = 'block';
+                document.getElementById('upload-filename').textContent = input.files[0].name;
+            }
+        }
+
+        async function uploadNewsImage() {
+            const fileInput = document.getElementById('news-image-input');
+            const file = fileInput.files[0];
+            const postId = document.getElementById('news-id').value;
+
+            if (!file || !postId) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                // Determine token manually since fetchWithAuth handles JSON only usually
+                const token = localStorage.getItem('sh_admin_token');
+
+                const res = await fetch(`/api/v1/news/${postId}/images`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }, // No Content-Type, let browser set boundary
+                    body: formData
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    insertImageMarkdown(data.url, data.filename);
+                    alert('Image uploaded!');
+                    fileInput.value = '';
+                    document.getElementById('upload-preview').style.display = 'none';
+                } else {
+                    alert('Upload failed');
+                }
+            } catch (e) {
+                alert('Error uploading: ' + e);
+            }
+        }
+
+        async function loadNewsImages() {
+            const postId = document.getElementById('news-id').value;
+            const grid = document.getElementById('news-gallery-grid');
+            grid.innerHTML = '<p style="color:#71717a">Loading...</p>';
+
+            try {
+                const res = await fetchWithAuth(`/api/v1/news/${postId}/images`);
+                const images = await res.json();
+                renderImageGrid(grid, images);
+            } catch (e) { grid.innerHTML = 'Error loading images'; }
+        }
+
+        async function loadAdminImages() {
+            const grid = document.getElementById('news-admin-grid');
+            grid.innerHTML = '<p style="color:#71717a">Loading...</p>';
+
+            try {
+                const res = await fetchWithAuth(`/api/v1/news/admin/images`);
+                const images = await res.json();
+                renderImageGrid(grid, images);
+            } catch (e) { grid.innerHTML = 'Error loading images'; }
+        }
+
+        function renderImageGrid(container, images) {
+            container.innerHTML = '';
+            if (images.length === 0) {
+                container.innerHTML = '<p style="color:#71717a; padding:10px;">No images found</p>';
+                return;
+            }
+
+            images.forEach(img => {
+                const div = document.createElement('div');
+                div.style.cssText = 'position: relative; aspect-ratio: 1; border: 1px solid #3f3f46; border-radius: 4px; overflow: hidden; cursor: pointer;';
+                div.innerHTML = `
+                    <img src="${img.url}" style="width:100%; height:100%; object-fit:cover;" title="${img.filename}">
+                    <div style="position: absolute; bottom:0; left:0; right:0; background: rgba(0,0,0,0.7); padding: 4px; font-size: 10px; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${img.filename}</div>
+                `;
+                div.onclick = () => showImageActions(img.url, img.filename);
+                container.appendChild(div);
+            });
+        }
+
+        function showImageActions(url, filename) {
+            // Simple action picker (could be a modal, using confirm for now)
+            const action = prompt(`Selected: ${filename}\n\n1. Insert into Content\n2. Set as Cover Image\n\nEnter number:`, "1");
+            if (action === "1") insertImageMarkdown(url, filename);
+            if (action === "2") {
+                document.getElementById('news-cover').value = url;
+                // Optional: Flash input to show update
+                document.getElementById('news-cover').style.borderColor = '#22c55e';
+                setTimeout(() => document.getElementById('news-cover').style.borderColor = '#27272a', 1000);
+            }
+        }
+
+        function insertImageMarkdown(url, alt) {
+            const textarea = document.getElementById('news-content');
+            const textToInsert = `\n![${alt}](${url})\n`;
+
+            // Insert at cursor position
+            if (textarea.selectionStart || textarea.selectionStart == '0') {
+                const startPos = textarea.selectionStart;
+                const endPos = textarea.selectionEnd;
+                textarea.value = textarea.value.substring(0, startPos)
+                    + textToInsert
+                    + textarea.value.substring(endPos, textarea.value.length);
+            } else {
+                textarea.value += textToInsert;
+            }
+        }
+
+        document.getElementById('news-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('news-id').value;
+            const isEdit = !!id;
+
+            // Collect selected tags
+            const selectedTags = Array.from(document.querySelectorAll('input[name="news-tag"]:checked'))
+                .map(cb => cb.value);
+
+            const data = {
+                title: document.getElementById('news-title').value,
+                excerpt: document.getElementById('news-excerpt').value || null,
+                content: document.getElementById('news-content').value,
+                cover_image_url: document.getElementById('news-cover').value || null,
+                is_pinned: document.getElementById('news-pinned').checked,
+                tags: selectedTags
+            };
+
+            try {
+                const url = isEdit ? `/api/v1/news/${id}` : '/api/v1/news';
+                const method = isEdit ? 'PUT' : 'POST';
+                const res = await fetchWithAuth(url, { method, body: JSON.stringify(data) });
+
+                if (res.ok) {
+                    hideModal('news-modal');
+                    loadNews();
+                } else {
+                    const err = await res.json();
+                    alert(err.detail || 'Failed to save post');
+                }
+            } catch (e) { alert('Error: ' + e); }
+        };
+
+        async function togglePublish(id, publish) {
+            try {
+                const res = await fetchWithAuth(`/api/v1/news/${id}/publish?publish=${publish}`, { method: 'POST' });
+                if (res.ok) loadNews(currentNewsPage);
+                else alert('Failed to change status');
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        async function deleteNews(id) {
+            if (!confirm('Delete this post?')) return;
+            try {
+                const res = await fetchWithAuth(`/api/v1/news/${id}`, { method: 'DELETE' });
+                if (res.ok) loadNews(currentNewsPage);
+                else alert('Failed to delete');
+            } catch (e) { alert('Error: ' + e); }
+        }
+
+        function prevNewsPage() { if (currentNewsPage > 1) loadNews(currentNewsPage - 1); }
+        function nextNewsPage() { loadNews(currentNewsPage + 1); }
+    </script>
+</body>
+
+</html>

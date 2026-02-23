@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:16
+    container_name: sh-lab-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      POSTGRES_DB: sh_lab
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: ./backend
+    container_name: sh-lab-backend
+    restart: always
+    depends_on:
+      - db
+    environment:
+      # Database
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      POSTGRES_SERVER: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: sh_lab
+      # Game storage
+      GAMES_REPO_PATH: ${GAMES_REPO_PATH:-/data/repo}
+      # Steam credentials (optional - can also configure in admin dashboard)
+      STEAM_USERNAME: ${STEAM_USERNAME:-}
+      STEAM_PASSWORD: ${STEAM_PASSWORD:-}
+      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      # IGDB (optional)
+      IGDB_CLIENT_ID: ${IGDB_CLIENT_ID:-}
+      IGDB_CLIENT_SECRET: ${IGDB_CLIENT_SECRET:-}
+      # Security
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+
+volumes:
+  postgres_data:

@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+watchfiles
+sqlmodel
+psycopg2-binary
+httpx
+pydantic-settings
+passlib[bcrypt]
+python-jose[cryptography]
+bcrypt
+python-multipart
+steam
+gevent-eventemitter
+gevent
+protobuf<=3.20.3
