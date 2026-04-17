@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.19",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-opener": "^2.5.3",
     "axios": "^1.13.3",
     "clsx": "^2.1.1",
     "hls.js": "^1.6.15",
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
-    "@tauri-apps/cli": "^2",
+    "@tauri-apps/cli": "^2.10.1",
     "@types/node": "^25.0.10",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",

@@ -19,7 +19,7 @@ export function NewsDetailsPage() {
     const { data: post, isLoading, error } = useQuery<NewsPost>({
         queryKey: ['news', postId],
         queryFn: async () => {
-            const res = await axios.get(`/api/v1/news/${postId}`);
+            const res = await axios.get(`/news/${postId}`);
             return res.data;
         },
         enabled: !!postId

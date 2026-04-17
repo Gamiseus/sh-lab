@@ -3,6 +3,7 @@ import { RefreshCw, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useLibraryStore, LocalGameData, GameMetadata } from "../stores/LibraryStore";
+import { api, getImageUrl } from "@/lib/api";
 
 export function LibraryPage() {
   const [isScanning, setIsScanning] = useState(false);
@@ -42,15 +43,10 @@ export function LibraryPage() {
       // 3. Fetch Metadata for these IDs from Backend
       if (allFoundGames.length > 0) {
         const ids = allFoundGames.map(g => g.id);
-        const response = await fetch("http://localhost:8000/api/v1/store/metadata/batch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(ids)
-        });
+        const response = await api.post<GameMetadata[]>("/store/metadata/batch", ids);
 
-        if (response.ok) {
-          const metadata: GameMetadata[] = await response.json();
-          setGameMetadata(metadata);
+        if (response.data) {
+          setGameMetadata(response.data);
         }
       }
 
@@ -116,7 +112,7 @@ export function LibraryPage() {
               <div className="absolute inset-0 bg-zinc-800">
                 {game.cover_url ? (
                   <img
-                    src={`http://localhost:8000${game.cover_url}`}
+                    src={getImageUrl(game.cover_url)}
                     alt={game.title}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />

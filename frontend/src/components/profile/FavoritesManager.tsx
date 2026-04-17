@@ -25,9 +25,9 @@ export function FavoritesManager({ currentFavorites, onSave, onClose }: Favorite
     useEffect(() => {
         setSelectedGames(
             currentFavorites.map(f => ({
-                id: f.id,
+                id: f.game_id,
                 title: f.title,
-                cover_url: f.cover_url
+                cover_url: f.cover_url || undefined
             }))
         );
     }, [currentFavorites]);

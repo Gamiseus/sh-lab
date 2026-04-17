@@ -206,7 +206,7 @@ export function GameInfoPanel({ game, isInstalled = false, onInstall, onLaunch }
                 )}
 
                 {/* Playtime */}
-                {game.playtime_minutes > 0 && (
+                {(game.playtime_minutes || 0) > 0 && (
                     <div className="flex items-center justify-between pt-4 border-t border-white/5">
                         <span className="text-zinc-400">Your Playtime</span>
                         <span className="text-violet-400 font-semibold">
@@ -223,7 +223,7 @@ export function GameInfoPanel({ game, isInstalled = false, onInstall, onLaunch }
                         <div>
                             <span className="text-xs text-zinc-500 uppercase tracking-wider">Genres</span>
                             <div className="flex flex-wrap gap-2 mt-2">
-                                {game.genres.map((genre) => (
+                                {game.genres.map((genre: string) => (
                                     <Link
                                         key={genre}
                                         to={`/store?genre=${encodeURIComponent(genre)}`}
@@ -240,7 +240,7 @@ export function GameInfoPanel({ game, isInstalled = false, onInstall, onLaunch }
                         <div>
                             <span className="text-xs text-zinc-500 uppercase tracking-wider">Features</span>
                             <div className="flex flex-wrap gap-2 mt-2">
-                                {game.categories.slice(0, 6).map((cat) => (
+                                {game.categories.slice(0, 6).map((cat: any) => (
                                     <Link
                                         key={cat.id}
                                         to={`/store?category=${encodeURIComponent(cat.description)}`}

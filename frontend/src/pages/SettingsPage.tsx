@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Trash, Folder, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-
+import { api, getImageUrl } from "@/lib/api";
 export function SettingsPage() {
     const queryClient = useQueryClient();
     // Local State for Library Paths (persisted in localStorage)
@@ -37,7 +37,7 @@ export function SettingsPage() {
     const handleResetLibrary = async () => {
         if (confirm("Are you sure? This will mark all games as Uninstalled in the database. You will need to Scan again to find them.")) {
             try {
-                await fetch("http://localhost:8000/api/v1/store/reset", { method: "POST" });
+                await api.post("/store/reset");
                 alert("Library reset complete.");
                 queryClient.invalidateQueries({ queryKey: ['games'] });
             } catch (e) {

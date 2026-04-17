@@ -57,7 +57,7 @@ export function ProfilePage() {
 
     // Friend request mutation
     const sendRequestMutation = useMutation({
-        mutationFn: (id: number) => friendsAPI.sendRequest(id),
+        mutationFn: (id: number) => friendsAPI.addFriend(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["profile", profileId] });
         },
@@ -242,7 +242,7 @@ export function ProfilePage() {
             </div>
 
             {/* Featured Games */}
-            {(!isPrivate && (profile.favorite_games?.length > 0 || isOwnProfile)) && (
+            {(!isPrivate && ((profile.favorite_games?.length || 0) > 0 || isOwnProfile)) && (
                 <div className="max-w-5xl mx-auto px-6 mt-12 mb-4">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -259,9 +259,9 @@ export function ProfilePage() {
                         )}
                     </div>
 
-                    {profile.favorite_games?.length > 0 ? (
+                    {(profile.favorite_games?.length || 0) > 0 ? (
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                            {profile.favorite_games.map(game => (
+                            {(profile.favorite_games || []).map((game: any) => (
                                 <Link to={`/store/${game.id}`} key={game.id} className="group relative block aspect-[2/3] bg-zinc-900 rounded-xl overflow-hidden ring-1 ring-white/10 hover:ring-violet-500 transition-all shadow-lg hover:shadow-violet-500/20">
                                     {game.cover_url ? (
                                         <img src={getImageUrl(game.cover_url)} alt={game.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />

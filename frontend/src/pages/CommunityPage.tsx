@@ -118,8 +118,8 @@ export function CommunityPage() {
                 <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {displayUsers
-                            .filter((u) => u.id !== user?.id) // Don't show own profile in grid
-                            .map((u) => (
+                            .filter((u: import("@/lib/api").UserCardData) => u.id !== user?.id) // Don't show own profile in grid
+                            .map((u: import("@/lib/api").UserCardData) => (
                                 <UserCard key={u.id} user={u} />
                             ))}
                     </div>

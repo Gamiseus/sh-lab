@@ -99,6 +99,18 @@ async def get_game_reviews(
         for review, user in results
     ]
 
+@router.get("/users/{user_id}", response_model=List[ReviewWithUser])
+async def get_user_reviews(
+    user_id: int,
+    page: int = 1,
+    limit: int = 50,
+    session: Session = Depends(get_session)
+):
+    """
+    Get all reviews authored by a specific user.
+    """
+    return []
+
 @router.get("/games/{game_id}/review-stats", response_model=ReviewStats)
 async def get_game_review_stats(
     game_id: int,

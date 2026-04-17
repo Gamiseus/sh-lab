@@ -11,7 +11,7 @@ interface ImageSelectionModalProps {
 function ImageSelectionModal({ type, onSelect, onClose }: ImageSelectionModalProps) {
     const [tab, setTab] = useState<'upload' | 'library' | 'presets'>('library');
     const [userImages, setUserImages] = useState<ImageInfo[]>([]);
-    const [presetImages, setPresetImages] = useState<string[]>([]);
+    const [presetImages, setPresetImages] = useState<ImageInfo[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
@@ -44,7 +44,9 @@ function ImageSelectionModal({ type, onSelect, onClose }: ImageSelectionModalPro
         setIsUploading(true);
         setUploadError(null);
         try {
-            const result = await profilesAPI.uploadImage(type, file);
+            const formData = new FormData();
+            formData.append("file", file);
+            const result = await profilesAPI.uploadImage(type, formData);
             onSelect(result.url); // Select immediately
         } catch (err) {
             setUploadError(err instanceof Error ? err.message : "Upload failed");
@@ -143,7 +145,7 @@ function ImageSelectionModal({ type, onSelect, onClose }: ImageSelectionModalPro
 
                                             {tab === 'library' && typeof item !== 'string' && (
                                                 <button
-                                                    onClick={(e) => handleDelete(item.filename, e)}
+                                                    onClick={(e) => handleDelete(item.filename || "", e)}
                                                     className="absolute top-1 right-1 p-1.5 bg-black/50 hover:bg-red-500/80 rounded-md text-white opacity-0 group-hover:opacity-100 transition-all"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
@@ -191,7 +193,7 @@ export function ProfileEditModal({ profile, onClose, onSaved }: ProfileEditModal
                 privacy_level: privacyLevel,
             };
 
-            await profilesAPI.updateMyProfile(update);
+            await profilesAPI.updateProfile(update);
             onSaved();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save profile");

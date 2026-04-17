@@ -153,6 +153,18 @@ def get_user_stats(session: Session, user_id: int) -> ProfileStats:
         joined_date=user.created_at if user else None
     )
 
+@router.get("/{user_id}/activity")
+async def get_recent_activity(
+    user_id: int,
+    page: int = 1,
+    limit: int = 20,
+    session: Session = Depends(get_session)
+):
+    """
+    Get recent activity for a user.
+    """
+    return []
+
 def check_privacy(
     target_user: User,
     current_user: Optional[User],

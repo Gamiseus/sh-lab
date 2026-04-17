@@ -16,7 +16,7 @@ export function NewsPage() {
         queryFn: async () => {
             const params: any = {};
             if (selectedTag) params.tag = selectedTag;
-            const res = await axios.get('/api/v1/news', { params });
+            const res = await axios.get('/news', { params });
             return res.data;
         }
     });
