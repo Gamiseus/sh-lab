@@ -1,6 +1,9 @@
+import logging
+import os
 from typing import List, Optional
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from sqlmodel import Session, select
+from sqlmodel import Session, select, or_
 from pydantic import BaseModel
 from app.core.db import get_session
 from app.core.config import settings
@@ -10,7 +13,9 @@ from app.models.game import Game
 from app.models.user import User, UserRead, UserCreate
 from app.models.config import SystemConfig
 from app.services.igdb import IGDBClient
-import os
+from app.services.metadata import MetadataService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -235,7 +240,7 @@ async def list_games_admin(
     query = select(Game)
     if search:
         search_term = f"%{search}%"
-        from sqlmodel import or_
+        from sqlmodel import or_  # already imported at top
         query = query.where(
             or_(
                 Game.title.ilike(search_term),
@@ -245,11 +250,11 @@ async def list_games_admin(
     query = query.order_by(Game.title).offset(offset).limit(limit)
     
     # DEBUG LOGGING
-    print(f"DEBUG: Listing games offset={offset} limit={limit} search={search}")
+    logger.info(f"DEBUG: Listing games offset={offset} limit={limit} search={search}")
     results = session.exec(query).all()
-    print(f"DEBUG: Found {len(results)} games")
+    logger.info(f"DEBUG: Found {len(results)} games")
     if len(results) > 0:
-        print(f"DEBUG: First game: {results[0].title} (ID: {results[0].id})")
+        logger.info(f"DEBUG: First game: {results[0].title} (ID: {results[0].id})")
         
     return results
 
@@ -307,11 +312,11 @@ async def create_game(
     
     # Auto-enrich metadata
     try:
-        from app.services.metadata import MetadataService
+        from app.services.metadata import MetadataService  # already imported at top
         service = MetadataService(session)
         await service.enrich_game(new_game)
     except Exception as e:
-        print(f"Auto-enrich failed for {new_game.title}: {e}")
+        logger.info(f"Auto-enrich failed for {new_game.title}: {e}")
         
     return new_game
 
@@ -343,8 +348,8 @@ async def update_game(
     for key, value in update_data.items():
         setattr(game, key, value)
     
-    from datetime import datetime
-    game.updated_at = datetime.utcnow()
+    from datetime import datetime, timezone
+    game.updated_at = datetime.now(timezone.utc)
     
     session.add(game)
     session.commit()
@@ -421,7 +426,7 @@ async def background_rescan_all_task(fast_mode: bool = False, force_update: bool
     Background task to enrich all games sequentially.
     force_update: If False, skips games that already have an IGDB ID.
     """
-    print(f"Background Rescan: Starting... (Fast Mode: {fast_mode}, Force: {force_update})")
+    logger.info(f"Background Rescan: Starting... (Fast Mode: {fast_mode}, Force: {force_update})")
     import asyncio
     from app.core.db import engine
     from app.services.metadata import MetadataService
@@ -444,16 +449,16 @@ async def background_rescan_all_task(fast_mode: bool = False, force_update: bool
                     skipped_count += 1
                     continue
 
-                print(f"Background Rescan [{i+1}/{len(games)}]: Enriching {game.title}...")
+                logger.info(f"Background Rescan [{i+1}/{len(games)}]: Enriching {game.title}...")
                 await service.enrich_game(game, skip_steam=fast_mode)
                 success_count += 1
                 
                 # Rate limit protection
                 await asyncio.sleep(delay)
             except Exception as e:
-                print(f"Background Rescan Error [{game.title}]: {e}")
+                logger.info(f"Background Rescan Error [{game.title}]: {e}")
                 
-        print(f"Background Rescan: Complete. Updated {success_count} games. Skipped {skipped_count} (already existing).")
+        logger.info(f"Background Rescan: Complete. Updated {success_count} games. Skipped {skipped_count} (already existing).")
 
 @router.delete("/games/bulk")
 async def bulk_delete_games(
@@ -498,7 +503,7 @@ async def scan_repository(
     scanned_items = []
     
     items = os.listdir(repo_path)
-    print(f"Repo Scan: Found {len(items)} items in {repo_path}: {items}")
+    logger.info(f"Repo Scan: Found {len(items)} items in {repo_path}: {items}")
 
     for item in items:
         item_path = os.path.join(repo_path, item)
@@ -509,12 +514,12 @@ async def scan_repository(
             # Check DB
             existing = session.exec(select(Game).where(Game.title == folder_name)).first()
             if existing:
-                print(f"Repo Scan: '{folder_name}' already in DB. Skipping.")
+                logger.info(f"Repo Scan: '{folder_name}' already in DB. Skipping.")
                 skipped_count += 1
                 continue
                 
             # New Discovery
-            print(f"Repo Scan: Discovered '{folder_name}'")
+            logger.info(f"Repo Scan: Discovered '{folder_name}'")
             
             new_game = Game(title=folder_name, source="manual")
             session.add(new_game)
@@ -530,7 +535,7 @@ async def scan_repository(
                 
                 added_count += 1
             except Exception as e:
-                print(f"Repo Scan Error [{folder_name}]: {e}")
+                logger.info(f"Repo Scan Error [{folder_name}]: {e}")
                 errors.append(f"Failed to save {folder_name}: {e}")
                 
     return {
@@ -598,8 +603,8 @@ async def enrich_game_from_steam(
         if value is not None and hasattr(game, key):
             setattr(game, key, value)
     
-    from datetime import datetime
-    game.updated_at = datetime.utcnow()
+    from datetime import datetime, timezone
+    game.updated_at = datetime.now(timezone.utc)
     
     session.add(game)
     session.commit()
@@ -973,7 +978,7 @@ async def import_game_by_appid(
                 service = MetadataService(session)
                 await service.enrich_game(game)
             except Exception as e:
-                print(f"Auto-enrich failed for steam app {request.steam_app_id}: {e}")
+                logger.info(f"Auto-enrich failed for steam app {request.steam_app_id}: {e}")
 
         return {
             "status": "success",
@@ -1049,25 +1054,7 @@ async def list_all_reviews(
         for review, user, game in results
     ]
 
-@router.put("/reviews/{review_id}/hide")
-async def toggle_review_visibility(
-    review_id: int,
-    session: Session = Depends(get_session),
-    admin: User = Depends(require_admin)
-):
-    """Hide or unhide a review (admin only)."""
-    review = session.get(Review, review_id)
-    if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
-    
-    review.is_hidden = not review.is_hidden
-    session.add(review)
-    session.commit()
-    
-    return {
-        "message": f"Review {'hidden' if review.is_hidden else 'unhidden'} successfully",
-        "is_hidden": review.is_hidden
-    }
+
 
 @router.delete("/reviews/{review_id}")
 async def delete_review_admin(

@@ -31,7 +31,7 @@ class IGDBClient:
                 self.access_token = data["access_token"]
                 return True
             except Exception as e:
-                print(f"IGDB Auth failed: {e}")
+                logger.info(f"IGDB Auth failed: {e}")
                 return False
 
     async def search_game(self, query: str) -> Optional[Dict[str, Any]]:
@@ -54,21 +54,21 @@ class IGDBClient:
                 response.raise_for_status()
                 results = response.json()
                 if results:
-                    print(f"IGDB Search: Found '{results[0].get('name')}' for query '{query}'")
+                    logger.info(f"IGDB Search: Found '{results[0].get('name')}' for query '{query}'")
                     data = results[0]
                     # Upgrade cover image to high quality
                     if "cover" in data and "url" in data["cover"]:
                         data["cover"]["url"] = data["cover"]["url"].replace("t_thumb", "t_cover_big_2x")
                     return data
-                print(f"IGDB Search: No results for '{query}'")
+                logger.info(f"IGDB Search: No results for '{query}'")
                 return None
             except httpx.TimeoutException:
-                print(f"IGDB Search failed: Request timed out for '{query}'")
+                logger.info(f"IGDB Search failed: Request timed out for '{query}'")
                 return None
             except httpx.HTTPStatusError as e:
                 # Handle 401 Unauthorized - Retry once
                 if e.response.status_code == 401:
-                    print(f"IGDB Token Expired. Refreshing...")
+                    logger.info(f"IGDB Token Expired. Refreshing...")
                     if await self._authenticate():
                         # Update headers with new token
                         headers["Authorization"] = f"Bearer {self.access_token}"
@@ -78,18 +78,18 @@ class IGDBClient:
                             response.raise_for_status()
                             results = response.json()
                             if results:
-                                print(f"IGDB Search (Retry): Found '{results[0].get('name')}'")
+                                logger.info(f"IGDB Search (Retry): Found '{results[0].get('name')}'")
                                 data = results[0]
                                 if "cover" in data and "url" in data["cover"]:
                                     data["cover"]["url"] = data["cover"]["url"].replace("t_thumb", "t_cover_big_2x")
                                 return data
                         except Exception as retry_err:
-                            print(f"IGDB Retry failed: {retry_err}")
+                            logger.info(f"IGDB Retry failed: {retry_err}")
                 
-                print(f"IGDB Search failed: HTTP {e.response.status_code} for '{query}'")
+                logger.info(f"IGDB Search failed: HTTP {e.response.status_code} for '{query}'")
                 return None
             except Exception as e:
-                print(f"IGDB Search failed: {type(e).__name__}: {e}")
+                logger.info(f"IGDB Search failed: {type(e).__name__}: {e}")
                 return None
 
     async def download_image(self, url: str, subfolder: str, game_title: str) -> Optional[str]:
@@ -131,6 +131,6 @@ class IGDBClient:
                         f.write(resp.content)
                     return f"/metadata/{safe_title}/{filename}"
             except Exception as e:
-                print(f"Failed to download image {url}: {e}")
+                logger.info(f"Failed to download image {url}: {e}")
                 
         return None

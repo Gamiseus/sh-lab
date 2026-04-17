@@ -1,9 +1,10 @@
+import os
 from sqlmodel import create_engine, SQLModel, Session
 from app.core.config import settings
 
 # Create database engine
-# echo=True will log all SQL queries (useful for debug)
-engine = create_engine(settings.DATABASE_URL, echo=True)
+# echo=True logs all SQL queries — only enable in development
+engine = create_engine(settings.DATABASE_URL, echo=os.getenv("SQL_ECHO", "").lower() == "true")
 
 def init_db():
     """Example init db function to create tables if they don't exist"""

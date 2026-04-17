@@ -2,7 +2,7 @@
 Friends API endpoints.
 """
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, or_, and_
 from pydantic import BaseModel
@@ -188,7 +188,7 @@ async def send_friend_request(
             else:
                 # They sent us a request, auto-accept!
                 existing.status = "accepted"
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(timezone.utc)
                 session.add(existing)
                 session.commit()
                 return {"message": "Friend request accepted (they had sent you one)", "status": "accepted"}
@@ -200,7 +200,7 @@ async def send_friend_request(
         user_id=current_user.id,
         friend_id=user_id,
         status="pending",
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
     
     session.add(friendship)
@@ -228,7 +228,7 @@ async def accept_friend_request(
         raise HTTPException(status_code=400, detail="Request is not pending")
     
     friendship.status = "accepted"
-    friendship.updated_at = datetime.utcnow()
+    friendship.updated_at = datetime.now(timezone.utc)
     
     session.add(friendship)
     session.commit()

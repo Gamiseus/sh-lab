@@ -1,7 +1,7 @@
 """
 Authentication API endpoints.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
@@ -81,7 +81,7 @@ async def login(
         )
     
     # Update last login
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     session.add(user)
     session.commit()
     
@@ -95,7 +95,7 @@ async def login(
     user_session = UserSession(
         user_id=user.id,
         token=access_token[:64],  # Store truncated token as identifier
-        expires_at=datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent", "")[:500]
     )

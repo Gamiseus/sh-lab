@@ -2,7 +2,7 @@
 Reviews API endpoints.
 """
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, func
 from pydantic import BaseModel
@@ -201,7 +201,7 @@ async def create_review(
         rating=review_data.rating,
         is_recommended=review_data.is_recommended,
         playtime_at_review=playtime_at_review,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
     
     session.add(review)
@@ -316,7 +316,7 @@ async def update_review(
     if review_data.is_recommended is not None:
         review.is_recommended = review_data.is_recommended
     
-    review.updated_at = datetime.utcnow()
+    review.updated_at = datetime.now(timezone.utc)
     
     session.add(review)
     session.commit()

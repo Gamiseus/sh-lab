@@ -2,7 +2,7 @@
 Playtime API endpoints for syncing and retrieving playtime data.
 """
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from pydantic import BaseModel
@@ -76,7 +76,7 @@ async def sync_playtime(
     try:
         playtime.last_played = datetime.fromisoformat(data.last_played.replace('Z', '+00:00'))
     except ValueError:
-        playtime.last_played = datetime.utcnow()
+        playtime.last_played = datetime.now(timezone.utc)
     
     session.add(playtime)
     session.commit()

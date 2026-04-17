@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.core.db import get_session
 from app.core.security import hash_password, create_access_token
+from app.core.auth import require_admin
 from app.core.config import settings
 from app.models.user import User
 from app.models.config import SystemConfig
@@ -175,10 +176,12 @@ async def complete_setup(
     )
 
 @router.post("/reset")
-async def reset_setup(session: Session = Depends(get_session)):
+async def reset_setup(
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin),
+):
     """
-    Reset setup status (for development/testing only).
-    In production, this should be removed or protected.
+    Reset setup status (admin only, for development/testing).
     """
     config = session.get(SystemConfig, "setup_complete")
     if config:

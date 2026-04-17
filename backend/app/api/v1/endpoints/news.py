@@ -1,9 +1,11 @@
 """
 News API Endpoints
 """
+import os
+import shutil
 from typing import List, Optional
-from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
 from sqlmodel import Session, select, func
 from sqlalchemy import desc
 
@@ -41,7 +43,7 @@ async def get_all_news_admin(
     
     return [
         NewsPostReadWithAuthor(
-            **post.dict(),
+            **post.model_dump(),
             author_username=user.username if user else "Deleted User",
             author_display_name=user.display_name if user else None
         )
@@ -109,7 +111,7 @@ async def get_news_posts(
     
     return [
         NewsPostReadWithAuthor(
-            **post.dict(),
+            **post.model_dump(),
             author_username=user.username if user else "Deleted User",
             author_display_name=user.display_name if user else None
         )
@@ -139,7 +141,7 @@ async def get_news_post(
     post, user = result
     
     return NewsPostReadWithAuthor(
-        **post.dict(),
+        **post.model_dump(),
         author_username=user.username if user else "Deleted User",
         author_display_name=user.display_name if user else None
     )
@@ -158,10 +160,10 @@ async def create_news_post(
     Admin: Create a new news post.
     """
     post = NewsPost(
-        **post_data.dict(),
+        **post_data.model_dump(),
         author_id=admin.id,
         is_published=False,  # Draft by default
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
     
     session.add(post)
@@ -169,7 +171,7 @@ async def create_news_post(
     session.refresh(post)
     
     return NewsPostReadWithAuthor(
-        **post.dict(),
+        **post.model_dump(),
         author_username=admin.username,
         author_display_name=admin.display_name
     )
@@ -189,11 +191,11 @@ async def update_news_post(
         raise HTTPException(status_code=404, detail="News post not found")
         
     # Update fields
-    post_dict = post_data.dict(exclude_unset=True)
+    post_dict = post_data.model_dump(exclude_unset=True)
     for key, value in post_dict.items():
         setattr(post, key, value)
         
-    post.updated_at = datetime.utcnow()
+    post.updated_at = datetime.now(timezone.utc)
     
     session.add(post)
     session.commit()
@@ -203,7 +205,7 @@ async def update_news_post(
     author = session.get(User, post.author_id)
     
     return NewsPostReadWithAuthor(
-        **post.dict(),
+        **post.model_dump(),
         author_username=author.username if author else "Deleted User",
         author_display_name=author.display_name if author else None
     )
@@ -224,7 +226,7 @@ async def publish_news_post(
         
     post.is_published = publish
     if publish and not post.published_at:
-        post.published_at = datetime.utcnow()
+        post.published_at = datetime.now(timezone.utc)
         
     session.add(post)
     session.commit()
@@ -259,10 +261,6 @@ async def delete_news_post(
 # ============================================================
 # Image Management Endpoints
 # ============================================================
-
-from fastapi import File, UploadFile
-import shutil
-import os
 
 @router.post("/{post_id}/images")
 async def upload_news_image(

@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
@@ -9,6 +10,8 @@ from app.core.auth import get_current_user_optional
 from app.models.game import Game, GameRead, GameCreate, GameUpdate
 from app.models.user import User
 from app.services.igdb import IGDBClient
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -89,7 +92,7 @@ def list_catalog(
     games = session.exec(query).all()
     return games
 
-# ... (get_game, get_game_count, list_genres, list_categories unchanged) ...
+
 
 @router.get("/featured", response_model=List[GameRead])
 def get_featured_games(
@@ -300,6 +303,42 @@ def get_top_rated_games(
 from fastapi import Response, Request
 from starlette.background import BackgroundTask
 import base64
+from urllib.parse import urlparse
+
+# Allowlist of domains the proxy is permitted to fetch from.
+# Only trusted external CDNs/APIs should be listed here to prevent SSRF.
+PROXY_ALLOWED_DOMAINS = {
+    "cdn.akamai.steamstatic.com",
+    "shared.akamai.steamstatic.com",
+    "steamcdn-a.akamaihd.net",
+    "cdn.cloudflare.steamstatic.com",
+    "store.steampowered.com",
+    "steamcommunity.com",
+    "clan.akamai.steamstatic.com",
+    "images.igdb.com",
+    "media.steampowered.com",
+    "video.akamai.steamstatic.com",
+    "video.cloudflare.steamstatic.com",
+}
+
+def _validate_proxy_url(url: str) -> str:
+    """Validate a URL against the allowed proxy domains. Raises HTTPException if not allowed."""
+    if not url.startswith("https://") and not url.startswith("http://"):
+        raise HTTPException(status_code=400, detail="Invalid URL: must start with http:// or https://")
+    
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise HTTPException(status_code=400, detail="Invalid URL: no hostname")
+    
+    # Check against allowlist
+    if hostname not in PROXY_ALLOWED_DOMAINS:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Domain '{hostname}' is not in the allowed proxy list"
+        )
+    
+    return url
 
 # Headers to strip from upstream responses to prevent browser issues
 EXCLUDED_HEADERS = {
@@ -316,8 +355,7 @@ async def proxy_image(url: str):
     Used for standard <img> tags (Posters) to avoid blocked direct loads.
     Fully buffers response to prevent connection stalls.
     """
-    if not url.startswith("http"):
-        raise HTTPException(status_code=400, detail="Invalid URL")
+    _validate_proxy_url(url)
         
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -327,7 +365,7 @@ async def proxy_image(url: str):
         try:
             r = await client.get(url, headers=headers)
         except Exception as e:
-            # print(f"Proxy Request Failed: {e}") # Debug only
+            # logger.info(f"Proxy Request Failed: {e}") # Debug only
             raise HTTPException(status_code=500, detail="Proxy Request Failed")
 
         if r.status_code != 200:
@@ -351,8 +389,7 @@ async def proxy_image_base64(url: str):
     Proxy image and return as Base64 JSON.
     Used for Screenshots and Thumbnails that are strictly blocked by browser networking.
     """
-    if not url.startswith("http"):
-        raise HTTPException(status_code=400, detail="Invalid URL")
+    _validate_proxy_url(url)
         
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -383,8 +420,7 @@ async def proxy_video(url: str, request: Request):
     Proxy video requests with Range support for streaming.
     Used for MP4/WebM playback that requires seeking and large file streaming.
     """
-    if not url.startswith("http"):
-        raise HTTPException(status_code=400, detail="Invalid URL")
+    _validate_proxy_url(url)
         
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -448,7 +484,7 @@ async def match_game(
 
     # If not found, ask IGDB
     igdb = IGDBClient(session)
-    print(f"Store Match: Searching IGDB for '{normalized_name}'")
+    logger.info(f"Store Match: Searching IGDB for '{normalized_name}'")
     
     result = await igdb.search_game(normalized_name)
     

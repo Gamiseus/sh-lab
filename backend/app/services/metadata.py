@@ -6,7 +6,7 @@ import re
 from typing import Dict, Optional, Any, List
 import httpx
 from sqlmodel import Session, select
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.game import Game
 from app.core.config import settings
@@ -164,7 +164,7 @@ class MetadataService:
             if hasattr(game, k):
                 setattr(game, k, v)
         
-        game.updated_at = datetime.utcnow()
+        game.updated_at = datetime.now(timezone.utc)
         self.session.add(game)
         self.session.commit()
         self.session.refresh(game)

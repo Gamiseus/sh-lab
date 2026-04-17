@@ -70,25 +70,33 @@ async def list_public_users(
     elif sort_by == "name":
         statement = base_query.order_by(User.display_name.asc().nullslast(), User.username.asc())
     else:
-        # For playtime/games, we need a subquery
         statement = base_query.order_by(User.created_at.desc())
     
     statement = statement.offset(offset).limit(per_page)
     users = session.exec(statement).all()
     
-    # Get stats for each user
+    if not users:
+        return CommunityResponse(users=[], total=total, page=page, per_page=per_page)
+    
+    # Batch fetch playtime stats for all users in one query (avoids N+1)
+    user_ids = [u.id for u in users]
+    playtime_stats = session.exec(
+        select(
+            UserPlaytime.user_id,
+            func.count(UserPlaytime.id).label("games_count"),
+            func.coalesce(func.sum(UserPlaytime.total_minutes), 0).label("total_minutes")
+        )
+        .where(UserPlaytime.user_id.in_(user_ids))
+        .group_by(UserPlaytime.user_id)
+    ).all()
+    
+    # Build lookup dict: user_id -> (games_count, total_minutes)
+    stats_map = {row[0]: (row[1], row[2]) for row in playtime_stats}
+    
+    # Build response cards
     user_cards = []
     for user in users:
-        # Get playtime stats
-        playtime_result = session.exec(
-            select(
-                func.count(UserPlaytime.id),
-                func.coalesce(func.sum(UserPlaytime.total_minutes), 0)
-            ).where(UserPlaytime.user_id == user.id)
-        ).one()
-        
-        games_count, total_minutes = playtime_result
-        
+        games_count, total_minutes = stats_map.get(user.id, (0, 0))
         user_cards.append(UserCardData(
             id=user.id,
             username=user.username,
@@ -99,7 +107,7 @@ async def list_public_users(
             joined_date=user.created_at
         ))
     
-    # Sort by playtime/games if requested
+    # Sort by playtime/games if requested (post-query sort since DB sort doesn't include stats)
     if sort_by == "playtime":
         user_cards.sort(key=lambda x: x.total_playtime_hours, reverse=True)
     elif sort_by == "games":

@@ -1,31 +1,17 @@
 """
 Security utilities for password hashing and JWT token management.
 """
-from datetime import datetime, timedelta
-from typing import Optional, Any
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 import bcrypt
 from jose import JWTError, jwt
-import secrets
+
+from app.core.config import settings
 
 # JWT Configuration
-# In production, load from environment/config
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
-REFRESH_TOKEN_EXPIRE_DAYS = 7
-
-def get_jwt_secret() -> str:
-    """
-    Get or generate JWT secret.
-    In production, this should be loaded from environment/database.
-    """
-    # TODO: Load from system_config table or environment
-    # For now, use a static secret (CHANGE IN PRODUCTION)
-    import os
-    secret = os.environ.get("JWT_SECRET")
-    if not secret:
-        # Fallback - in production this should fail or auto-generate and persist
-        secret = "sh-lab-dev-secret-change-in-production-abc123"
-    return secret
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
 # ============================================================
 # Password Hashing (using bcrypt directly)
@@ -65,19 +51,20 @@ def create_access_token(
         Encoded JWT token string
     """
     to_encode = data.copy()
+    now = datetime.now(timezone.utc)
     
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = now + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": now,
         "type": "access"
     })
     
-    encoded_jwt = jwt.encode(to_encode, get_jwt_secret(), algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 def create_refresh_token(data: dict) -> str:
@@ -85,15 +72,16 @@ def create_refresh_token(data: dict) -> str:
     Create a longer-lived refresh token.
     """
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     
     to_encode.update({
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": now,
         "type": "refresh"
     })
     
-    encoded_jwt = jwt.encode(to_encode, get_jwt_secret(), algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 def decode_token(token: str) -> Optional[dict]:
@@ -104,14 +92,10 @@ def decode_token(token: str) -> Optional[dict]:
         Decoded payload if valid, None if invalid/expired
     """
     try:
-        payload = jwt.decode(token, get_jwt_secret(), algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except JWTError:
         return None
-
-def generate_session_token() -> str:
-    """Generate a secure random session token."""
-    return secrets.token_urlsafe(32)
 
 # ============================================================
 # Token Payload Helpers

@@ -6,11 +6,6 @@ mod game_launcher;
 use tauri::Emitter;
 
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-#[tauri::command]
 fn open_folder(base_path: String, relative_path: String) -> Result<(), String> {
     use std::process::Command;
     use std::path::Path;
@@ -141,7 +136,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            greet,
             open_folder,
             scan_library_path,
             uninstall_game_command,

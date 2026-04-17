@@ -87,6 +87,7 @@ class GameBase(SQLModel):
     updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
 
 class Game(GameBase, table=True):
+    __tablename__ = "game"
     id: Optional[int] = Field(default=None, primary_key=True)
 
 class GameCreate(SQLModel):

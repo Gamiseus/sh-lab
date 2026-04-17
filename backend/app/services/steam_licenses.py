@@ -8,7 +8,7 @@ import subprocess
 import platform
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 import httpx
 
 from sqlmodel import Session, select
@@ -329,7 +329,7 @@ class SteamLicenseService:
             "phase": "Getting licenses",
             "progress": 0,
             "total": 0,
-            "started_at": datetime.utcnow().isoformat()
+            "started_at": datetime.now(timezone.utc).isoformat()
         }
         
         try:

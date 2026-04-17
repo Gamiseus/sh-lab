@@ -11,8 +11,18 @@ export interface GameMetadata {
     id: number;
     title: string;
     cover_url?: string;
+    background_url?: string;
+    description?: string;
+    summary?: string;
+    developer?: string;
+    publisher?: string;
+    release_date?: string;
+    rating?: number;
+    genres?: string[];
+    categories?: string[];
+    steam_app_id?: number;
+    igdb_id?: number;
     playtime_minutes: number;
-    // ... other metadata
 }
 
 // Combined View

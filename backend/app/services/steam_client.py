@@ -53,14 +53,6 @@ class SteamClientService:
     async def close(self):
         pass
 
-    # Stub methods to satisfy dependencies if any, though users shouldn't call them directly
-    # kept simple
-        
-# Singleton
-_steam_service = SteamClientService()
-
-def get_steam_client() -> SteamClientService:
-    return _steam_service
 
 # Singleton
 _steam_service = SteamClientService()

@@ -2,7 +2,7 @@
 User Profile API endpoints.
 """
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlmodel import Session, select, func, col
 from pydantic import BaseModel
@@ -342,7 +342,7 @@ async def upload_profile_image(
         url=url,
         filename=filename,
         type=type,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         is_server=False
     )
 
