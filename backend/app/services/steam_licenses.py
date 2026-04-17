@@ -3,12 +3,15 @@ Steam License Import Service.
 Extracts owned games from Steam account via SteamCMD licenses_print command.
 """
 import asyncio
+import logging
 import re
 import subprocess
 import platform
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 import httpx
 
 from sqlmodel import Session, select
@@ -34,6 +37,8 @@ class ImportResult:
     skipped_existing: int = 0
     skipped_free: int = 0
     skipped_invalid: int = 0
+    skipped_demo: int = 0
+    skipped_online_only: int = 0
     errors: List[Dict] = field(default_factory=list)
     games_added: List[str] = field(default_factory=list)
 
@@ -162,112 +167,156 @@ class SteamLicenseService:
             app_ids.update(lic.app_ids)
         return sorted(app_ids)
     
-    async def check_is_free_game(self, app_id: int) -> Optional[bool]:
-        """
-        Check if a game is free via Steam API.
-        Returns: True if free, False if paid, None if error.
-        """
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(
-                    f"https://store.steampowered.com/api/appdetails",
-                    params={"appids": str(app_id)},
-                    timeout=10.0
-                )
-                
-                if resp.status_code != 200:
-                    return None
-                
-                data = resp.json()
-                app_data = data.get(str(app_id), {})
-                
-                if not app_data.get("success"):
-                    return None
-                
-                game_info = app_data.get("data", {})
-                
-                # Check if it's a game (type == "game")
-                if game_info.get("type") != "game":
-                    return None  # Not a game, skip
-                
-                return game_info.get("is_free", False)
-                
-        except Exception:
-            return None
+    # ----------------------------------------------------------------
+    # Filtering constants
+    # ----------------------------------------------------------------
+    # Steam category IDs that indicate single-player support
+    SINGLE_PLAYER_CATEGORIES = {2}  # 2 = Single-player
+    # Categories that indicate online/multiplayer gameplay
+    ONLINE_CATEGORIES = {1, 36, 38, 49}  # 1=MP, 36=Online MP, 38=Online Co-op, 49=PvP
+    # Name suffixes that indicate demos or trials
+    DEMO_SUFFIXES = (
+        " demo", " trial", " beta", " playtest",
+        " prologue", " benchmark", " test",
+    )
     
-    async def import_single_game(
+    def _is_demo_by_name(self, name: str) -> bool:
+        """Check if a game name indicates it's a demo/trial/beta."""
+        lower = name.lower().strip()
+        for suffix in self.DEMO_SUFFIXES:
+            if lower.endswith(suffix):
+                return True
+        # Also catch patterns like "Game Name (Demo)" or "Game - Demo"
+        if lower.endswith("(demo)") or lower.endswith("(trial)"):
+            return True
+        return False
+    
+    def _is_online_only(self, game_data: Dict) -> bool:
+        """
+        Detect online-only games that can't be played on a local install.
+        A game is online-only if it has multiplayer categories but NO
+        single-player category.
+        """
+        # Check PICS-style category IDs (set of ints)
+        cat_ids = set(game_data.get("steam_category_ids", []))
+        if cat_ids:
+            has_singleplayer = bool(cat_ids & self.SINGLE_PLAYER_CATEGORIES)
+            has_online = bool(cat_ids & self.ONLINE_CATEGORIES)
+            if has_online and not has_singleplayer:
+                return True
+            return False
+        
+        # Check Store API-style categories (list of dicts with 'id' key)
+        categories = game_data.get("categories", [])
+        if isinstance(categories, list) and categories:
+            cat_id_set = set()
+            for cat in categories:
+                if isinstance(cat, dict) and "id" in cat:
+                    cat_id_set.add(int(cat["id"]))
+            if cat_id_set:
+                has_singleplayer = bool(cat_id_set & self.SINGLE_PLAYER_CATEGORIES)
+                has_online = bool(cat_id_set & self.ONLINE_CATEGORIES)
+                if has_online and not has_singleplayer:
+                    return True
+        
+        return False
+    
+    def _build_game_object(
         self,
-        session: Session,
         app_id: int,
-        preloaded_data: Optional[Dict] = None
-    ) -> Tuple[str, Optional[str]]:
+        game_data: Dict,
+        game_name: str,
+    ) -> Game:
         """
-        Import a single game by app ID.
-        Returns: (status, error_message)
-        Status: "imported", "skipped_existing", "skipped_free", "skipped_invalid", "error"
+        Build a Game ORM object from PICS or Store API data.
+        Does NOT add to session or commit — caller handles persistence.
         """
-        # Check if already in database
-        existing = session.exec(
-            select(Game).where(Game.steam_app_id == app_id)
-        ).first()
-        
-        if existing:
-            return ("skipped_existing", None)
-        
-        # Fetch game details
-        try:
-            if preloaded_data:
-                game_data = preloaded_data
-            else:
-                game_data = await self.steam_store.get_app_details(app_id)
-            
-            if not game_data:
-                return ("skipped_invalid", "No data returned from Steam")
-            
-            # Check if it's a game
-            if game_data.get("type") != "game":
-                return ("skipped_invalid", f"Not a game (type: {game_data.get('type')})")
-            
-            # Check if free
-            if game_data.get("is_free", False):
-                return ("skipped_free", None)
-            
-            # Create game entry
-            game = Game(
-                title=game_data.get("name", f"App {app_id}"),
-                steam_app_id=app_id,
-                source="steam",
-                short_description=game_data.get("short_description"),
-                about_the_game=game_data.get("about_the_game"),
-                description=game_data.get("detailed_description"),
-                developer=", ".join(game_data.get("developers", [])),
-                publisher=", ".join(game_data.get("publishers", [])),
-                header_image=game_data.get("header_image"),
-                capsule_image=game_data.get("capsule_image"),
-                genres=[g.get("description") for g in game_data.get("genres", [])] if game_data.get("genres") else [],
-                screenshots=game_data.get("screenshots"),
-                movies=self._parse_movies(game_data.get("movies", [])),
-                categories=game_data.get("categories"),
-                platforms=game_data.get("platforms"),
-                metacritic_score=game_data.get("metacritic", {}).get("score") if game_data.get("metacritic") else None,
-                metacritic_url=game_data.get("metacritic", {}).get("url") if game_data.get("metacritic") else None,
-                pc_requirements=self._stringify_requirements(game_data.get("pc_requirements")),
-                mac_requirements=self._stringify_requirements(game_data.get("mac_requirements")),
-                linux_requirements=self._stringify_requirements(game_data.get("linux_requirements")),
-                achievements_total=game_data.get("achievements", {}).get("total") if game_data.get("achievements") else None,
-                achievements_highlighted=game_data.get("achievements", {}).get("highlighted") if game_data.get("achievements") else None,
-                release_date=game_data.get("release_date", {}).get("date"),
-                price_cents=self._extract_price(game_data.get("price_overview")),
-                discount_percent=game_data.get("price_overview", {}).get("discount_percent") if game_data.get("price_overview") else None,
-            )
-            
-            session.add(game)
-            session.commit()
-            
-            return ("imported", None)
-            
-        except Exception as e:
-            return ("error", str(e))
+        # Handle both PICS-style and Store API-style data formats
+        developer = game_data.get("developer", "")
+        if isinstance(developer, list):
+            developer = ", ".join(developer)
+        elif not developer:
+            developers = game_data.get("developers", [])
+            developer = ", ".join(developers) if developers else None
+
+        publisher = game_data.get("publisher", "")
+        if isinstance(publisher, list):
+            publisher = ", ".join(publisher)
+        elif not publisher:
+            publishers = game_data.get("publishers", [])
+            publisher = ", ".join(publishers) if publishers else None
+
+        # Genre handling: PICS gives list of strings, Store API gives list of dicts
+        raw_genres = game_data.get("genres", [])
+        if raw_genres and isinstance(raw_genres[0], dict):
+            genres = [g.get("description") for g in raw_genres]
+        else:
+            genres = raw_genres or []
+
+        return Game(
+            title=game_name,
+            steam_app_id=app_id,
+            source="steam",
+            short_description=game_data.get("short_description"),
+            about_the_game=game_data.get("about_the_game"),
+            description=game_data.get("detailed_description") or game_data.get("description"),
+            developer=developer,
+            publisher=publisher,
+            header_image=game_data.get("header_image"),
+            capsule_image=game_data.get("capsule_image"),
+            genres=genres,
+            screenshots=game_data.get("screenshots"),
+            movies=self._parse_movies(game_data.get("movies") or []),
+            categories=game_data.get("categories"),
+            platforms=game_data.get("platforms"),
+            metacritic_score=game_data.get("metacritic", {}).get("score") if game_data.get("metacritic") else None,
+            metacritic_url=game_data.get("metacritic", {}).get("url") if game_data.get("metacritic") else None,
+            pc_requirements=self._stringify_requirements(game_data.get("pc_requirements")),
+            mac_requirements=self._stringify_requirements(game_data.get("mac_requirements")),
+            linux_requirements=self._stringify_requirements(game_data.get("linux_requirements")),
+            achievements_total=game_data.get("achievements", {}).get("total") if game_data.get("achievements") else None,
+            achievements_highlighted=game_data.get("achievements", {}).get("highlighted") if game_data.get("achievements") else None,
+            release_date=game_data.get("release_date", {}).get("date") if isinstance(game_data.get("release_date"), dict) else game_data.get("release_date"),
+            price_cents=self._extract_price(game_data.get("price_overview")),
+            discount_percent=game_data.get("price_overview", {}).get("discount_percent") if game_data.get("price_overview") else None,
+        )
+
+    def filter_game_data(
+        self,
+        app_id: int,
+        game_data: Optional[Dict],
+    ) -> Tuple[str, Optional[str], Optional[str]]:
+        """
+        Run the filtering pipeline on a single game's data.
+        Pure function — no DB access, no side effects.
+
+        Returns: (status, game_name_or_None, error_message_or_None)
+        Status: "pass", "skipped_free", "skipped_invalid",
+                "skipped_demo", "skipped_online_only"
+        """
+        if not game_data:
+            return ("skipped_invalid", None, "No data returned from Steam")
+
+        game_name = game_data.get("name") or game_data.get("title", f"App {app_id}")
+
+        # 1. Type check — must be 'game'
+        app_type = game_data.get("type", "unknown")
+        if app_type != "game":
+            return ("skipped_invalid", game_name, f"Not a game (type: {app_type})")
+
+        # 2. Free-to-play check
+        if game_data.get("is_free", False):
+            return ("skipped_free", game_name, None)
+
+        # 3. Demo/trial/beta by name
+        if self._is_demo_by_name(game_name):
+            return ("skipped_demo", game_name, f"Demo/trial: {game_name}")
+
+        # 4. Online-only check
+        if self._is_online_only(game_data):
+            return ("skipped_online_only", game_name, f"Online-only: {game_name}")
+
+        return ("pass", game_name, None)
     
     def _parse_movies(self, movies: List[Dict]) -> List[Dict]:
         """Parse movie data to extract streaming URLs."""
@@ -311,89 +360,171 @@ class SteamLicenseService:
         steamcmd_path: str,
         username: str,
         password: str,
-        batch_size: int = 20,
+        batch_size: int = 50,
         delay_seconds: float = 3.0,
         auth_code: Optional[str] = None
     ) -> ImportResult:
         """
-        Full import pipeline:
-        1. Run licenses_print
-        2. Parse output
-        3. Import each game with BATCH FETCHING.
+        Optimized import pipeline:
+        1. Run SteamCMD licenses_print
+        2. Batch-check DB for existing IDs (single query)
+        3. Fetch ALL remaining PICS metadata in one subprocess call
+        4. Filter in memory, batch-commit survivors
         """
         result = ImportResult()
-        
-        # Update status
+
         self._import_status = {
             "running": True,
             "phase": "Getting licenses",
             "progress": 0,
             "total": 0,
-            "started_at": datetime.now(timezone.utc).isoformat()
+            "started_at": datetime.now(timezone.utc).isoformat(),
         }
-        
+
         try:
-            # Get licenses
-            output = await self.get_licenses_output(steamcmd_path, username, password, auth_code)
+            # ── Step 1: Get license list from SteamCMD ──────────────
+            output = await self.get_licenses_output(
+                steamcmd_path, username, password, auth_code
+            )
             licenses = self.parse_licenses_output(output)
             all_app_ids = self.extract_unique_app_ids(licenses)
-            
-            result.total_found = len(all_app_ids)
-            
-            # Filter out existing games to save requests
-            ids_to_process = []
-            for app_id in all_app_ids:
-                existing = session.exec(select(Game).where(Game.steam_app_id == app_id)).first()
-                if existing:
-                    result.skipped_existing += 1
-                else:
-                    ids_to_process.append(app_id)
 
-            self._import_status["phase"] = "Importing games (Batching)"
+            result.total_found = len(all_app_ids)
+            logger.info(
+                f"Found {len(all_app_ids)} unique app IDs from "
+                f"{len(licenses)} license packages"
+            )
+
+            # ── Step 2: Batch existence check (one query) ──────────
+            self._import_status["phase"] = "Checking existing games"
+            existing_ids: set = set()
+            # Process in chunks of 500 to stay within SQL IN() limits
+            for i in range(0, len(all_app_ids), 500):
+                chunk = all_app_ids[i : i + 500]
+                rows = session.exec(
+                    select(Game.steam_app_id).where(
+                        Game.steam_app_id.in_(chunk)
+                    )
+                ).all()
+                existing_ids.update(rows)
+
+            ids_to_process = [aid for aid in all_app_ids if aid not in existing_ids]
+            result.skipped_existing = len(existing_ids)
+            logger.info(
+                f"{result.skipped_existing} already in DB, "
+                f"{len(ids_to_process)} to process"
+            )
+
+            if not ids_to_process:
+                self._import_status["phase"] = "Complete"
+                self._import_status["running"] = False
+                return result
+
+            # ── Step 3: Fetch ALL PICS data in one subprocess ──────
+            self._import_status["phase"] = "Fetching metadata (PICS)"
             self._import_status["total"] = len(ids_to_process)
-            
-            # Process in batches
-            for i in range(0, len(ids_to_process), batch_size):
-                chunk = ids_to_process[i : i+batch_size]
-                self._import_status["progress"] = i
-                
-                # Fetch Batch Metadata
-                batch_data = await self.steam_store.get_app_details_batch(chunk)
-                
+
+            all_pics_data = await self.steam_store.get_app_details_batch(
+                ids_to_process
+            )
+            logger.info(
+                f"PICS returned data for {sum(1 for v in all_pics_data.values() if v)} / "
+                f"{len(ids_to_process)} apps"
+            )
+
+            # ── Step 4: Filter + batch commit ──────────────────────
+            self._import_status["phase"] = "Filtering & importing"
+
+            # Process in commit-chunks for safety.
+            # Each chunk is an independent transaction boundary.
+            for chunk_start in range(0, len(ids_to_process), batch_size):
+                chunk = ids_to_process[chunk_start : chunk_start + batch_size]
+                self._import_status["progress"] = chunk_start
+
+                games_to_add: List[Game] = []
+                titles_to_add: List[str] = []
+
                 for app_id in chunk:
-                    data = batch_data.get(app_id)
-                    # Pass preloaded data to import_single_game
-                    status, error = await self.import_single_game(session, app_id, preloaded_data=data)
-                    
-                    if status == "imported":
-                        result.imported += 1
-                        # Get game name for the result
-                        game = session.exec(
-                            select(Game).where(Game.steam_app_id == app_id)
-                        ).first()
-                        if game:
-                            result.games_added.append(game.title)
-                    elif status == "skipped_existing":
-                        result.skipped_existing += 1
-                    elif status == "skipped_free":
+                    data = all_pics_data.get(app_id)
+
+                    # Run pure filtering (no DB, no side effects)
+                    status, game_name, error = self.filter_game_data(app_id, data)
+
+                    if status == "skipped_free":
                         result.skipped_free += 1
                     elif status == "skipped_invalid":
                         result.skipped_invalid += 1
-                    elif status == "error":
-                        result.errors.append({"app_id": app_id, "error": error})
-                
-                # Rate limiting - delay after each batch
-                await asyncio.sleep(delay_seconds)
-            
+                    elif status == "skipped_demo":
+                        result.skipped_demo += 1
+                    elif status == "skipped_online_only":
+                        result.skipped_online_only += 1
+                    elif status == "pass":
+                        # Build the ORM object (not yet in session)
+                        # game_name is always set when status is "pass"
+                        assert game_name is not None
+                        try:
+                            game = self._build_game_object(app_id, data, game_name)
+                            games_to_add.append(game)
+                            titles_to_add.append(game_name)
+                        except Exception as e:
+                            logger.error(f"Error building game {app_id}: {e}")
+                            result.errors.append({"app_id": app_id, "error": str(e)})
+
+                # Batch commit for this chunk
+                if games_to_add:
+                    try:
+                        for game in games_to_add:
+                            session.add(game)
+                        session.commit()
+
+                        result.imported += len(games_to_add)
+                        result.games_added.extend(titles_to_add)
+                        logger.info(
+                            f"Committed chunk: {len(games_to_add)} games "
+                            f"({chunk_start + len(chunk)}/{len(ids_to_process)})"
+                        )
+                    except Exception as e:
+                        # Roll back the failed chunk and fall back to
+                        # one-at-a-time commits so one bad row doesn't
+                        # kill the entire batch.
+                        session.rollback()
+                        logger.warning(
+                            f"Batch commit failed, falling back to individual "
+                            f"inserts for {len(games_to_add)} games: {e}"
+                        )
+                        for game, title in zip(games_to_add, titles_to_add):
+                            try:
+                                session.add(game)
+                                session.commit()
+                                result.imported += 1
+                                result.games_added.append(title)
+                            except Exception as inner_e:
+                                session.rollback()
+                                logger.error(
+                                    f"Individual insert failed for "
+                                    f"{game.steam_app_id}: {inner_e}"
+                                )
+                                result.errors.append({
+                                    "app_id": game.steam_app_id,
+                                    "error": str(inner_e),
+                                })
+
             self._import_status["phase"] = "Complete"
             self._import_status["running"] = False
-            
+
+            logger.info(
+                f"Import complete: {result.imported} imported, "
+                f"{result.skipped_free} free, {result.skipped_invalid} non-game, "
+                f"{result.skipped_demo} demos, {result.skipped_online_only} online-only, "
+                f"{len(result.errors)} errors"
+            )
+
         except Exception as e:
             self._import_status["phase"] = "Error"
             self._import_status["error"] = str(e)
             self._import_status["running"] = False
             raise
-        
+
         return result
     
     def get_import_status(self) -> Dict:

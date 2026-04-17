@@ -105,57 +105,82 @@ class SteamStoreService:
     def parse_pics_data(self, app_id: int, info: Dict) -> Dict[str, Any]:
         """
         Parse PICS (Protobuf) data into Game model format.
-        PICS is sparse compared to Store API.
+        PICS is sparse compared to Store API but contains critical
+        type/free/category info needed for filtering.
         """
         common = info.get("common", {})
         extended = info.get("extended", {})
         
-        # Image URL construction
-        # https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{appid}/{hash}.jpg
-        icon_hash = common.get("icon")
-        logo_hash = common.get("logo")
+        # --- App type & filtering metadata ---
+        # PICS common.type values: 'Game', 'DLC', 'Demo', 'Tool',
+        #   'Application', 'Video', 'Music', 'Series', 'Config', 'Hardware'
+        # Normalize to lowercase to match Steam Store API format
+        pics_type = common.get("type", "")
+        app_type = pics_type.lower() if pics_type else "unknown"
         
-        header_image = None
-        if logo_hash:
-             header_image = f"https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{logo_hash}.jpg"
+        # Free game detection: extended.isfreeapp = "1" for free games
+        is_free_raw = extended.get("isfreeapp", "0")
+        is_free = str(is_free_raw) == "1"
         
-        # Fallback: Store Header URL is predictable!
-        # https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{appid}/header.jpg
-        # This is strictly better than PICS logo.
+        # Release state: 'released', 'prerelease', 'preloadonly', etc.
+        release_state = common.get("releasestate", "")
+        
+        # --- Steam categories (for online-only detection) ---
+        # PICS stores categories as: common.category = { 'category_2': '1', 'category_36': '1', ... }
+        # Category IDs: 2=Single-player, 1=Multi-player, 36=Online Multi-Player,
+        #   38=Co-op, 9=Co-op (old), 49=PvP, 47=LAN PvP, etc.
+        raw_categories = common.get("category", {})
+        category_ids = set()
+        if isinstance(raw_categories, dict):
+            for key, val in raw_categories.items():
+                # Keys look like "category_2", extract the number
+                if key.startswith("category_") and str(val) == "1":
+                    try:
+                        category_ids.add(int(key.split("_")[1]))
+                    except (ValueError, IndexError):
+                        pass
+        
+        # --- Image URLs ---
         header_image = f"https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{app_id}/header.jpg"
         capsule_image = f"https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{app_id}/capsule_616x353.jpg"
 
+        # --- Genres ---
         genres = []
-        # PICS genres are in common['associations']? Or 'genres'?
-        # Usually associations: { '0': { 'type': 'genre', 'name': 'Action' } }
         assocs = common.get("associations", {})
-        if isinstance(assocs, list): # sometimes list
+        if isinstance(assocs, list):
              for a in assocs:
                  if a.get("type") == "genre":
                      genres.append(a.get("name"))
-        elif isinstance(assocs, dict): # sometimes dict
+        elif isinstance(assocs, dict):
              for k, v in assocs.items():
                  if v.get("type") == "genre":
                      genres.append(v.get("name"))
 
         return {
+            # Filtering fields (critical for import_single_game)
+            "type": app_type,
+            "is_free": is_free,
+            "release_state": release_state,
+            "steam_category_ids": sorted(category_ids),
+            # Game metadata
+            "name": common.get("name", f"App {app_id}"),
             "title": common.get("name", f"App {app_id}"),
             "steam_app_id": app_id,
             "description": "Metadata from PICS (Fast Load). Run enrichment for full details.",
             "short_description": None,
-            "about_the_game": None, # PICS has no HTML description
+            "about_the_game": None,
             "header_image": header_image,
             "capsule_image": capsule_image,
             "developer": extended.get("developer"),
             "publisher": extended.get("publisher"),
             "genres": genres,
-            "categories": None, # categories in PICS are technical usually
+            "categories": None,
             "platforms": {
-                "windows": common.get("oslist", "").find("windows") != -1,
-                "mac": common.get("oslist", "").find("macos") != -1,
-                "linux": common.get("oslist", "").find("linux") != -1
+                "windows": "windows" in common.get("oslist", ""),
+                "mac": "macos" in common.get("oslist", ""),
+                "linux": "linux" in common.get("oslist", ""),
             },
-            "release_date": None, # release state is code, not date string
+            "release_date": None,
             "source": "steam_pics"
         }
 

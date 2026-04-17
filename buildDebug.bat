@@ -1,3 +1,4 @@
-cd .\frontend
+@echo off
+cd /d "%~dp0\frontend"
 npm run tauri build -- --debug
 pause

@@ -915,8 +915,10 @@ async def import_steam_licenses(
             "skipped_existing": result.skipped_existing,
             "skipped_free": result.skipped_free,
             "skipped_invalid": result.skipped_invalid,
-            "errors": result.errors[:10],  # Limit errors shown
-            "games_added": result.games_added[:20],  # Limit games shown
+            "skipped_demo": result.skipped_demo,
+            "skipped_online_only": result.skipped_online_only,
+            "errors": result.errors[:10],
+            "games_added": result.games_added[:20],
         }
         
     except Exception as e:
