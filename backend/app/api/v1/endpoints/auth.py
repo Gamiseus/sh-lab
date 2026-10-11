@@ -92,9 +92,11 @@ async def login(
     
     # Optionally store session in database for tracking
     # (enables logout and session management)
+    import hashlib
+    session_token = hashlib.sha256(f"{access_token}:{datetime.now(timezone.utc).timestamp()}".encode()).hexdigest()
     user_session = UserSession(
         user_id=user.id,
-        token=access_token[:64],  # Store truncated token as identifier
+        token=session_token,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent", "")[:500]

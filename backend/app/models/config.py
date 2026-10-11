@@ -1,6 +1,9 @@
 from typing import Optional
 from sqlmodel import Field, SQLModel
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 class SystemConfig(SQLModel, table=True):
     __tablename__ = "system_config"
@@ -10,7 +13,7 @@ class SystemConfig(SQLModel, table=True):
     value_type: str = Field(default="string")  # 'string', 'number', 'boolean', 'json'
     description: Optional[str] = None
     is_secret: bool = Field(default=False)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default_factory=utc_now)
     updated_by: Optional[int] = Field(default=None, foreign_key="users.id")
 
 class SystemConfigRead(SQLModel):

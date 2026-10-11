@@ -20,24 +20,49 @@ def fetch_metadata(app_ids):
         print(json.dumps({}))
         return
 
+    import time
     client = SteamClient()
     try:
-        client.anonymous_login()
+        login_res = client.anonymous_login()
+        if login_res != 1:
+            time.sleep(2)
+            login_res = client.anonymous_login()
+            if login_res != 1:
+                sys.stderr.write(f"Anonymous login failed with code {login_res}\n")
+                sys.stderr.flush()
+                print(json.dumps({}))
+                return
 
-        # PICS supports large batches natively — fetch all at once.
-        # The steam library internally chunks if needed.
-        products = client.get_product_info(app_ids, timeout=30)
+        all_apps = {}
+        chunk_size = 100
+        total = len(app_ids)
 
-        if not products:
-            print(json.dumps({}))
-            return
+        for i in range(0, total, chunk_size):
+            chunk = app_ids[i:i + chunk_size]
+            try:
+                if not client.connected:
+                    client.anonymous_login()
 
-        # Structure: {'apps': {10: {...}}, 'packages': ...}
-        apps = products.get('apps', {})
-        print(json.dumps(apps, default=str))
+                products = client.get_product_info(chunk, timeout=25)
+                if products and 'apps' in products:
+                    for app_id, app_info in products['apps'].items():
+                        if isinstance(app_info, dict):
+                            all_apps[str(app_id)] = {
+                                'common': app_info.get('common', {}),
+                                'extended': app_info.get('extended', {})
+                            }
+            except Exception as e:
+                sys.stderr.write(f"Error fetching chunk {i}..{i+len(chunk)}: {e}\n")
+
+            curr = min(i + len(chunk), total)
+            sys.stderr.write(f"PROGRESS:{curr}:{total}\n")
+            sys.stderr.flush()
+
+        print(json.dumps(all_apps, default=str))
 
     except Exception as e:
-        logging.error(f"Failed to fetch metadata: {e}")
+        sys.stderr.write(f"Failed to fetch metadata: {e}\n")
+        sys.stderr.flush()
         print(json.dumps({}))
     finally:
         try:

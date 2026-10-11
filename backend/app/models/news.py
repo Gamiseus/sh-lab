@@ -2,7 +2,10 @@ from typing import Optional, List
 from sqlmodel import Field, SQLModel, Column
 from sqlalchemy import Text
 from sqlalchemy.dialects.postgresql import ARRAY
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 class NewsPostBase(SQLModel):
     title: str = Field(max_length=255)
@@ -20,7 +23,7 @@ class NewsPost(NewsPostBase, table=True):
     author_id: Optional[int] = Field(default=None, foreign_key="users.id")
     is_published: bool = Field(default=False)
     published_at: Optional[datetime] = None
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=utc_now)
     updated_at: Optional[datetime] = None
 
 class NewsPostCreate(SQLModel):

@@ -47,12 +47,6 @@ function App() {
                   <p style={{ color: '#888' }}>The download manager is under development and will be available in a future update.</p>
                 </div>
               } />
-              <Route path="/servers" element={
-                <div className="p-8 text-center">
-                  <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Dedicated Servers</h1>
-                  <p style={{ color: '#888' }}>Server management is under development and will be available in a future update.</p>
-                </div>
-              } />
             </Route>
           </Routes>
         </BrowserRouter>

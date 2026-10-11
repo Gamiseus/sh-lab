@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Trash, Folder, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, getImageUrl } from "@/lib/api";
+import { api } from "@/lib/api";
 export function SettingsPage() {
     const queryClient = useQueryClient();
     // Local State for Library Paths (persisted in localStorage)

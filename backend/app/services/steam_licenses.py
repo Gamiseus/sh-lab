@@ -7,7 +7,7 @@ import logging
 import re
 import subprocess
 import platform
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -49,6 +49,30 @@ class SteamLicenseService:
     def __init__(self):
         self.steam_store = SteamStoreService()
         self._import_status: Dict = {}  # Track ongoing imports
+
+    def has_cached_token(self, username: str, steamcmd_path: str) -> bool:
+        """
+        Check if SteamCMD has a saved machine token / cached credentials
+        for the given username in config.vdf.
+        """
+        import os
+        possible_paths = [
+            os.path.join(steamcmd_path, "config", "config.vdf"),
+            os.path.expanduser("~/.steam/steam/config/config.vdf"),
+            os.path.expanduser("~/Steam/config/config.vdf"),
+            "/root/Steam/config/config.vdf",
+        ]
+        user_lower = username.lower().strip()
+        for path in possible_paths:
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read().lower()
+                        if "accounts" in content and user_lower in content:
+                            return True
+                except Exception:
+                    pass
+        return False
     
     async def run_steamcmd(
         self,
@@ -56,7 +80,8 @@ class SteamLicenseService:
         username: str,
         password: str,
         min_commands: List[str],
-        auth_code: Optional[str] = None
+        auth_code: Optional[str] = None,
+        task: Optional[Any] = None
     ) -> Tuple[str, str, int]:
         """
         Run SteamCMD with given commands.
@@ -64,14 +89,23 @@ class SteamLicenseService:
         Returns: (stdout, stderr, return_code)
         """
         import os
-        # Build command - steamcmd_path is directory containing the executable
         is_windows = platform.system() == "Windows"
         exe_name = "steamcmd.exe" if is_windows else "steamcmd.sh"
         executable = os.path.join(steamcmd_path, exe_name)
         
-        login_args = ["+login", username, password]
         if auth_code:
-            login_args.append(auth_code)
+            # Explicit Steam Guard 2FA code provided: authorize and instruct SteamCMD to remember session (1)
+            login_args = ["+login", username, password, auth_code, "1"]
+            if task:
+                task.log("Authenticating with Steam Guard code and saving machine token...", level="info")
+        elif self.has_cached_token(username, steamcmd_path):
+            # Machine token cached: login password-free
+            login_args = ["+login", username]
+            if task:
+                task.log(f"Logging in as '{username}' using saved machine token (password-free)...", level="info")
+        else:
+            # Fall back to username and password with remember flag
+            login_args = ["+login", username, password, "1"] if password else ["+login", username]
             
         cmd = [
             executable,
@@ -80,19 +114,56 @@ class SteamLicenseService:
             "+quit"
         ]
         
-        # Run asynchronously
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             stdin=asyncio.subprocess.PIPE
         )
-        
-        stdout, stderr = await process.communicate()
-        
+
+        stdout_lines: List[str] = []
+        stderr_lines: List[str] = []
+
+        async def read_out():
+            pkg_count = 0
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace")
+                stdout_lines.append(text)
+                stripped = text.strip()
+                if not stripped:
+                    continue
+                masked = stripped.replace(password, "******") if password else stripped
+                if any(k in masked for k in ("Logging in", "Logged in OK", "Waiting for", "Steam Guard", "FAILED")):
+                    if task:
+                        level = "success" if "Logged in OK" in masked else "warning" if "Steam Guard" in masked or "FAILED" in masked else "info"
+                        task.log(masked, level=level)
+                elif "packageID" in masked:
+                    pkg_count += 1
+                    if task and pkg_count % 500 == 0:
+                        task.log(f"Reading licenses via SteamCMD ({pkg_count} packages detected)...", level="info")
+                        task.set_progress(5, 100, f"Reading licenses ({pkg_count} packages)...")
+
+        async def read_err():
+            while True:
+                line = await process.stderr.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace")
+                stderr_lines.append(text)
+                stripped = text.strip()
+                if stripped and task:
+                    masked = stripped.replace(password, "******") if password else stripped
+                    task.log(f"[SteamCMD] {masked}", level="warning")
+
+        await asyncio.gather(read_out(), read_err())
+        await process.wait()
+
         return (
-            stdout.decode("utf-8", errors="replace"),
-            stderr.decode("utf-8", errors="replace"),
+            "".join(stdout_lines),
+            "".join(stderr_lines),
             process.returncode or 0
         )
     
@@ -101,7 +172,8 @@ class SteamLicenseService:
         steamcmd_path: str,
         username: str,
         password: str,
-        auth_code: Optional[str] = None
+        auth_code: Optional[str] = None,
+        task: Optional[Any] = None
     ) -> str:
         """Run licenses_print and return raw output."""
         stdout, stderr, code = await self.run_steamcmd(
@@ -109,10 +181,16 @@ class SteamLicenseService:
             username,
             password,
             ["+licenses_print"],
-            auth_code
+            auth_code,
+            task=task
         )
         
         if code != 0:
+            if code == 5:
+                raise RuntimeError(
+                    "Steam Guard authentication required (exit code 5). "
+                    "Please enter your Steam Guard code in the Steam tab or approve the prompt in your Steam Mobile app, then retry."
+                )
             raise RuntimeError(f"SteamCMD failed with code {code}: {stderr}")
         
         return stdout
@@ -264,6 +342,8 @@ class SteamLicenseService:
             publisher=publisher,
             header_image=game_data.get("header_image"),
             capsule_image=game_data.get("capsule_image"),
+            cover_url=game_data.get("capsule_image") or game_data.get("header_image"),
+            background_url=game_data.get("header_image"),
             genres=genres,
             screenshots=game_data.get("screenshots"),
             movies=self._parse_movies(game_data.get("movies") or []),
@@ -362,7 +442,8 @@ class SteamLicenseService:
         password: str,
         batch_size: int = 50,
         delay_seconds: float = 3.0,
-        auth_code: Optional[str] = None
+        auth_code: Optional[str] = None,
+        task: Optional[Any] = None
     ) -> ImportResult:
         """
         Optimized import pipeline:
@@ -383,8 +464,12 @@ class SteamLicenseService:
 
         try:
             # ── Step 1: Get license list from SteamCMD ──────────────
+            if task:
+                task.set_progress(0, 100, f"Fetching license package list for account '{username}'...")
+                task.log(f"Launching SteamCMD to retrieve owned packages for '{username}'...", level="info")
+
             output = await self.get_licenses_output(
-                steamcmd_path, username, password, auth_code
+                steamcmd_path, username, password, auth_code, task=task
             )
             licenses = self.parse_licenses_output(output)
             all_app_ids = self.extract_unique_app_ids(licenses)
@@ -394,11 +479,19 @@ class SteamLicenseService:
                 f"Found {len(all_app_ids)} unique app IDs from "
                 f"{len(licenses)} license packages"
             )
+            if task:
+                task.log(
+                    f"Successfully parsed {len(licenses)} packages ({len(all_app_ids)} unique App IDs found).",
+                    level="success"
+                )
 
             # ── Step 2: Batch existence check (one query) ──────────
             self._import_status["phase"] = "Checking existing games"
+            if task:
+                task.set_progress(10, 100, "Checking catalog for existing games...")
+                task.log("Checking database catalog for existing games...", level="info")
+
             existing_ids: set = set()
-            # Process in chunks of 500 to stay within SQL IN() limits
             for i in range(0, len(all_app_ids), 500):
                 chunk = all_app_ids[i : i + 500]
                 rows = session.exec(
@@ -414,32 +507,68 @@ class SteamLicenseService:
                 f"{result.skipped_existing} already in DB, "
                 f"{len(ids_to_process)} to process"
             )
+            if task:
+                task.log(
+                    f"Catalog check: {result.skipped_existing} already in catalog, {len(ids_to_process)} new items to evaluate.",
+                    level="info"
+                )
 
             if not ids_to_process:
                 self._import_status["phase"] = "Complete"
                 self._import_status["running"] = False
+                if task:
+                    task.set_progress(100, 100, "Catalog is already up to date.")
+                    task.log("All owned licenses are already present in your catalog.", level="success")
                 return result
 
-            # ── Step 3: Fetch ALL PICS data in one subprocess ──────
+            # ── Step 3: Fetch PICS data via fast-lane subprocess ──────
             self._import_status["phase"] = "Fetching metadata (PICS)"
             self._import_status["total"] = len(ids_to_process)
+            if task:
+                task.set_progress(15, 100, f"Fetching Steam metadata (0/{len(ids_to_process)})...")
+                task.log(f"Fetching metadata via Steam PICS protocol for {len(ids_to_process)} items...", level="info")
+
+            last_logged = [0]
+            def on_pics_progress(current: int, total: int):
+                if task and total > 0:
+                    pct = 15 + int((current / total) * 50)
+                    task.set_progress(pct, 100, f"Fetching Steam metadata ({current}/{total})...")
+                    if current - last_logged[0] >= 300 or current == total:
+                        last_logged[0] = current
+                        task.log(f"Steam metadata progress: {current}/{total} items processed...", level="info")
 
             all_pics_data = await self.steam_store.get_app_details_batch(
-                ids_to_process
+                ids_to_process,
+                progress_callback=on_pics_progress
             )
+            valid_pics_count = sum(1 for v in all_pics_data.values() if v)
             logger.info(
-                f"PICS returned data for {sum(1 for v in all_pics_data.values() if v)} / "
+                f"PICS returned data for {valid_pics_count} / "
                 f"{len(ids_to_process)} apps"
             )
+            if task:
+                task.log(
+                    f"Metadata retrieval complete: {valid_pics_count} of {len(ids_to_process)} apps returned valid metadata.",
+                    level="success" if valid_pics_count > 0 else "warning"
+                )
 
             # ── Step 4: Filter + batch commit ──────────────────────
             self._import_status["phase"] = "Filtering & importing"
+            if task:
+                task.set_progress(65, 100, "Filtering games and saving to catalog...")
+                task.log("Filtering games and importing into catalog...", level="info")
 
-            # Process in commit-chunks for safety.
-            # Each chunk is an independent transaction boundary.
             for chunk_start in range(0, len(ids_to_process), batch_size):
+                if task and getattr(task, "_cancel_requested", False):
+                    task.log("License import cancelled by user request.", level="warning")
+                    break
+
                 chunk = ids_to_process[chunk_start : chunk_start + batch_size]
                 self._import_status["progress"] = chunk_start
+                curr_idx = chunk_start + len(chunk)
+                if task and len(ids_to_process) > 0:
+                    pct = 65 + int((curr_idx / len(ids_to_process)) * 35)
+                    task.set_progress(pct, 100, f"Filtering & importing ({curr_idx}/{len(ids_to_process)})...")
 
                 games_to_add: List[Game] = []
                 titles_to_add: List[str] = []
@@ -447,7 +576,6 @@ class SteamLicenseService:
                 for app_id in chunk:
                     data = all_pics_data.get(app_id)
 
-                    # Run pure filtering (no DB, no side effects)
                     status, game_name, error = self.filter_game_data(app_id, data)
 
                     if status == "skipped_free":
@@ -459,8 +587,6 @@ class SteamLicenseService:
                     elif status == "skipped_online_only":
                         result.skipped_online_only += 1
                     elif status == "pass":
-                        # Build the ORM object (not yet in session)
-                        # game_name is always set when status is "pass"
                         assert game_name is not None
                         try:
                             game = self._build_game_object(app_id, data, game_name)
@@ -483,10 +609,10 @@ class SteamLicenseService:
                             f"Committed chunk: {len(games_to_add)} games "
                             f"({chunk_start + len(chunk)}/{len(ids_to_process)})"
                         )
+                        if task:
+                            preview = ", ".join(titles_to_add[:3]) + ("..." if len(titles_to_add) > 3 else "")
+                            task.log(f"Added batch of {len(games_to_add)} games ({preview})", level="info")
                     except Exception as e:
-                        # Roll back the failed chunk and fall back to
-                        # one-at-a-time commits so one bad row doesn't
-                        # kill the entire batch.
                         session.rollback()
                         logger.warning(
                             f"Batch commit failed, falling back to individual "
@@ -512,6 +638,18 @@ class SteamLicenseService:
             self._import_status["phase"] = "Complete"
             self._import_status["running"] = False
 
+            if task:
+                task.set_progress(100, 100, f"Import complete: {result.imported} new games added.")
+                task.log(
+                    f"Import breakdown: {result.imported} games added to catalog, "
+                    f"{result.skipped_existing} existing in catalog, "
+                    f"{result.skipped_free} free games skipped, "
+                    f"{result.skipped_demo} demos skipped, "
+                    f"{result.skipped_online_only} online-only skipped, "
+                    f"{result.skipped_invalid} non-game items (DLCs/tools/software) skipped.",
+                    level="success"
+                )
+
             logger.info(
                 f"Import complete: {result.imported} imported, "
                 f"{result.skipped_free} free, {result.skipped_invalid} non-game, "
@@ -530,6 +668,41 @@ class SteamLicenseService:
     def get_import_status(self) -> Dict:
         """Get current import status."""
         return self._import_status.copy()
+
+    async def import_single_game(
+        self,
+        session: Session,
+        app_id: int,
+        preloaded_data: Optional[Dict] = None
+    ) -> Tuple[str, Optional[str]]:
+        """
+        Import a single game by Steam App ID.
+        Returns: (status, error_message)
+        """
+        existing = session.exec(select(Game).where(Game.steam_app_id == app_id)).first()
+        if existing:
+            return ("skipped_existing", None)
+
+        if preloaded_data is not None:
+            game_data = preloaded_data
+        else:
+            pics_batch = await self.steam_store.get_app_details_batch([app_id])
+            game_data = pics_batch.get(app_id)
+            if not game_data:
+                game_data = await self.steam_store.get_app_details(app_id)
+
+        status, game_name, error = self.filter_game_data(app_id, game_data)
+        if status != "pass":
+            return (status, error)
+
+        try:
+            game = self._build_game_object(app_id, game_data, game_name)
+            session.add(game)
+            session.commit()
+            return ("imported", None)
+        except Exception as e:
+            session.rollback()
+            return ("error", str(e))
 
 
 async def search_steam_store(query: str, limit: int = 20) -> List[Dict]:

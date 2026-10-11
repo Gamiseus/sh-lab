@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "admin")
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "db")
     POSTGRES_PORT: str = os.getenv("POSTGRES_PORT", "5432")
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "sh-lab")
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "sh_lab")
     
     # IGDB
     IGDB_CLIENT_ID: str = os.getenv("IGDB_CLIENT_ID", "")
@@ -34,10 +34,16 @@ class Settings(BaseSettings):
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+    # Admin / First-Time Setup
+    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin")
+    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "admin@example.com")
+    AUTO_CREATE_ADMIN: bool = os.getenv("AUTO_CREATE_ADMIN", "true").lower() in ("true", "1", "yes")
     
     @property
     def DATABASE_URL(self) -> str:
-        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         
     class Config:
         case_sensitive = True

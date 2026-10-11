@@ -1,6 +1,9 @@
 from typing import Optional
 from sqlmodel import Field, SQLModel
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 class GameRequestBase(SQLModel):
     game_name: str = Field(max_length=255)
@@ -18,7 +21,7 @@ class GameRequest(GameRequestBase, table=True):
     priority: int = Field(default=0)
     admin_notes: Optional[str] = None
     assigned_game_id: Optional[int] = Field(default=None, foreign_key="game.id")
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=utc_now)
     resolved_at: Optional[datetime] = None
     resolved_by: Optional[int] = Field(default=None, foreign_key="users.id")
 

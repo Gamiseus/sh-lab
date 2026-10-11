@@ -394,6 +394,195 @@
             font-size: 24px;
             color: #52525b;
         }
+
+        /* Toast Notifications */
+        #toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .toast {
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #fff;
+            background: #18181b;
+            border: 1px solid #27272a;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: toast-in 0.25s ease-out;
+            pointer-events: auto;
+            transition: opacity 0.3s, transform 0.3s;
+            min-width: 280px;
+            max-width: 440px;
+        }
+
+        .toast.toast-success {
+            border-left: 4px solid #22c55e;
+        }
+
+        .toast.toast-error {
+            border-left: 4px solid #ef4444;
+        }
+
+        .toast.toast-warning {
+            border-left: 4px solid #f59e0b;
+        }
+
+        .toast.toast-info {
+            border-left: 4px solid #3b82f6;
+        }
+
+        @keyframes toast-in {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Pulsing Task Indicator */
+        .task-pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #3b82f6;
+            display: inline-block;
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+            animation: pulse-blue 1.5s infinite;
+        }
+
+        @keyframes pulse-blue {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+            }
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+            }
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+            }
+        }
+
+        /* Console Modal & Live Stream */
+        .console-modal-dialog {
+            width: 900px;
+            max-width: 95vw;
+            background: #121216;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 640px;
+            max-height: 90vh;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.85);
+        }
+
+        .console-header {
+            background: #18181c;
+            padding: 14px 20px;
+            border-bottom: 1px solid #27272a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .console-body {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+            padding: 16px 20px;
+            gap: 12px;
+        }
+
+        .console-terminal {
+            flex: 1;
+            background: #09090c;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 14px;
+            font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+            font-size: 12.5px;
+            line-height: 1.55;
+            color: #d4d4d8;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+            display: block;
+            max-height: none;
+        }
+
+        .console-progress-track {
+            background: #27272a;
+            border-radius: 4px;
+            height: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .console-progress-bar {
+            background: #3b82f6;
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .console-footer {
+            background: #18181c;
+            padding: 12px 20px;
+            border-top: 1px solid #27272a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Stats Grid for Diagnostics */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .stat-card .stat-val {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .stat-card .stat-label {
+            font-size: 12px;
+            color: #71717a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
     </style>
 </head>
 
@@ -411,6 +600,12 @@
                 <input type="password" id="login-password" required autocomplete="current-password">
             </div>
             <button type="submit" style="width: 100%; margin-top: 10px;">Login</button>
+            <div style="margin-top: 14px; text-align: center; font-size: 12px; color: #71717a;">
+                Default credentials: <code>admin</code> / <code>admin</code> (or see <code>.env</code>)
+            </div>
+            <div style="margin-top: 8px; text-align: center;">
+                <button type="button" class="secondary small" style="background:transparent; border:none; color:#52525b; font-size:11px; cursor:pointer;" onclick="document.getElementById('setup-wizard').classList.remove('hidden'); document.getElementById('login-container').classList.add('hidden');">⚙ Run Setup Wizard</button>
+            </div>
             <p id="login-error" style="color: #ef4444; text-align: center; margin-top: 16px;"></p>
         </form>
     </div>
@@ -424,6 +619,11 @@
                     <h2>Backend Administration Dashboard</h2>
                 </div>
                 <div class="header-right">
+                    <div id="active-tasks-pill" onclick="openConsoleModal()" style="display:none; cursor:pointer; align-items:center; gap:8px; padding:6px 14px; background:#1e1e24; border:1px solid #3f3f46; border-radius:20px; font-size:12px; font-weight:500;">
+                        <span class="task-pulse-dot"></span>
+                        <span id="active-tasks-text">0 Running</span>
+                    </div>
+                    <button class="secondary small" onclick="openConsoleModal()">📟 Live Console</button>
                     <span class="user-info">Logged in as <strong id="current-user">admin</strong></span>
                     <button class="secondary small" onclick="logout()">Logout</button>
                 </div>
@@ -436,6 +636,7 @@
                 <button class="tab" onclick="showTab('reviews')">Reviews</button>
                 <button class="tab" onclick="showTab('news')">News</button>
                 <button class="tab" onclick="showTab('config')">Settings</button>
+                <button class="tab" onclick="showTab('diagnostics')">Diagnostics & Logs</button>
             </div>
 
             <!-- Games Tab -->
@@ -546,11 +747,12 @@
                 <div class="card">
                     <h3>🔐 Steam Guard & Login Test</h3>
                     <p>Test your Steam credentials and authenticate with Steam Guard (Email/Mobile 2FA).</p>
-                    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
                         <input type="text" id="steam-guard-code" placeholder="Steam Guard Code (Optional)"
                             style="max-width: 200px;">
                         <button onclick="testSteamLogin()">Test Login</button>
                     </div>
+                    <small style="color:#71717a; display:block; margin-bottom:16px;">If a machine token is saved, logins and license imports run password-free. Entering a Steam Guard code here saves and updates the session token.</small>
 
                     <div id="login-output-container" style="display:none;">
                         <div style="margin-bottom:8px; font-weight:bold; color: #a1a1aa; font-size: 0.9em;">Output:
@@ -695,6 +897,73 @@
                             </tr>
                         </thead>
                         <tbody id="config-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Diagnostics & Logs Tab -->
+            <div id="tab-diagnostics" class="tab-content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-val" id="diag-games-count">-</span>
+                        <span class="stat-label">Total Games</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-val" id="diag-users-count">-</span>
+                        <span class="stat-label">Registered Users</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-val" id="diag-reviews-count">-</span>
+                        <span class="stat-label">Total Reviews</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-val" id="diag-news-count">-</span>
+                        <span class="stat-label">News Articles</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <h3 style="margin:0;">System Storage & Environment</h3>
+                        <button class="secondary small" onclick="loadSystemStatus()">🔄 Refresh Diagnostics</button>
+                    </div>
+                    <div style="margin-bottom:16px;">
+                        <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;">
+                            <span id="disk-path-label" style="color:#a1a1aa;">Data Directory: ...</span>
+                            <span id="disk-usage-label" style="font-weight:500;">- / - GB (-% used)</span>
+                        </div>
+                        <div class="console-progress-track" style="height:10px;">
+                            <div id="disk-progress-bar" class="console-progress-bar" style="width:0%;"></div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:20px; font-size:13px; color:#a1a1aa; border-top:1px solid #27272a; padding-top:12px;">
+                        <div>SteamCMD Status: <span id="diag-steamcmd-badge" class="badge" style="background:#27272a;">Checking...</span></div>
+                        <div id="diag-steamcmd-path" style="font-family:monospace; font-size:12px; color:#71717a;"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <h3 style="margin:0;">Background Task Manager</h3>
+                        <div class="btn-group">
+                            <button class="secondary small" onclick="loadTasksList()">🔄 Refresh Tasks</button>
+                            <button class="small" onclick="openConsoleModal()">📟 Open Console</button>
+                        </div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:110px;">Task ID</th>
+                                <th>Name</th>
+                                <th style="width:110px;">Status</th>
+                                <th style="width:160px;">Progress</th>
+                                <th style="width:140px;">Started</th>
+                                <th style="width:140px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tasks-tbody">
+                            <tr><td colspan="6" style="color:#71717a; text-align:center; padding:20px;">Loading tasks...</td></tr>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -970,10 +1239,61 @@
                 </div>
 
                 <button type="submit" style="width: 100%; margin-top: 16px;">Complete Setup</button>
+                <div style="margin-top: 10px; text-align: center;">
+                    <button type="button" class="secondary small" style="background:transparent; border:none; color:#71717a; font-size:12px; cursor:pointer;" onclick="document.getElementById('setup-wizard').classList.add('hidden'); document.getElementById('login-container').classList.remove('hidden');">← Back to Login</button>
+                </div>
                 <p id="setup-error" style="color: #ef4444; text-align: center; margin-top: 12px;"></p>
             </form>
         </div>
     </div>
+
+    <!-- Console Modal -->
+    <div id="console-modal" class="modal-overlay hidden">
+        <div class="console-modal-dialog">
+            <div class="console-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 18px;">📟</span>
+                    <div>
+                        <div style="font-weight: 600; font-size: 15px; color: #fff;" id="console-task-title">Background Task Console</div>
+                        <div style="font-size: 12px; color: #71717a;" id="console-task-subtitle">No task attached</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <select id="console-task-selector" onchange="attachConsoleToTask(this.value)" style="background: #18181b; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 8px; font-size: 12px; max-width: 220px; display: none;"></select>
+                    <span id="console-status-badge" class="badge" style="background: #3b82f6;">IDLE</span>
+                    <button class="danger small" id="console-cancel-btn" onclick="cancelCurrentTask()" style="display: none;">Cancel Task</button>
+                    <button class="secondary small" onclick="closeConsoleModal()">✕ Close</button>
+                </div>
+            </div>
+            <div class="console-body">
+                <div id="console-progress-container" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: #a1a1aa;">
+                        <span id="console-progress-message">Processing...</span>
+                        <span id="console-progress-percent" style="font-weight: bold; color: #e4e4e7;">0%</span>
+                    </div>
+                    <div class="console-progress-track">
+                        <div id="console-progress-bar" class="console-progress-bar"></div>
+                    </div>
+                </div>
+                <pre id="console-terminal" class="console-terminal">Connecting to log stream...</pre>
+            </div>
+            <div class="console-footer">
+                <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: #a1a1aa;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="console-autoscroll" checked onchange="autoScrollTerminal = this.checked"> Auto-scroll to bottom
+                    </label>
+                    <span id="console-line-count" style="color: #71717a;">0 lines</span>
+                </div>
+                <div class="btn-group">
+                    <button class="secondary small" onclick="copyConsoleLogs()">📋 Copy Logs</button>
+                    <button class="secondary small" onclick="clearConsoleView()">Clear View</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container"></div>
 
     <script>
         let authToken = localStorage.getItem('sh_admin_token') || '';
@@ -1108,6 +1428,8 @@
         function logout() {
             authToken = '';
             localStorage.removeItem('sh_admin_token');
+            if (taskPollInterval) clearInterval(taskPollInterval);
+            if (currentEventSource) { currentEventSource.close(); currentEventSource = null; }
             document.getElementById('login-container').classList.remove('hidden');
             document.getElementById('dashboard').classList.add('hidden');
         }
@@ -1119,6 +1441,10 @@
             loadGames();
             loadUsers();
             loadConfig();
+            loadSystemStatus();
+            pollActiveTasks();
+            if (taskPollInterval) clearInterval(taskPollInterval);
+            taskPollInterval = setInterval(pollActiveTasks, 4000);
         }
 
         function fetchWithAuth(url, options = {}) {
@@ -1131,11 +1457,444 @@
         function showTab(name) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            document.querySelector(`[onclick="showTab('${name}')"]`).classList.add('active');
-            document.getElementById(`tab-${name}`).classList.add('active');
+            const btn = document.querySelector(`[onclick="showTab('${name}')"]`);
+            if (btn) btn.classList.add('active');
+            const tabEl = document.getElementById(`tab-${name}`);
+            if (tabEl) tabEl.classList.add('active');
+
+            if (name === 'games') loadGames();
+            else if (name === 'users') loadUsers();
+            else if (name === 'steam') { checkSteamCMDStatus(); loadSteamConfig(); }
+            else if (name === 'reviews') loadReviews();
+            else if (name === 'news') loadNews();
+            else if (name === 'config') loadConfig();
+            else if (name === 'diagnostics') { loadSystemStatus(); loadTasksList(); }
         }
 
         function hideModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        // ============================================================
+        // Toast Notifications
+        // ============================================================
+
+        function showToast(message, type = 'info', duration = 4000) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            const icons = {
+                success: '✓',
+                error: '✕',
+                warning: '⚠',
+                info: 'ℹ'
+            };
+            toast.innerHTML = `<span style="font-weight:bold; font-size:16px;">${icons[type] || '•'}</span><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(12px)';
+                setTimeout(() => toast.remove(), 320);
+            }, duration);
+        }
+
+        // ============================================================
+        // Task Manager & Live Console Streaming
+        // ============================================================
+
+        let currentEventSource = null;
+        let activeTaskId = null;
+        let taskPollInterval = null;
+        let autoScrollTerminal = true;
+        let terminalLogs = [];
+
+        function openConsoleModal(taskId) {
+            document.getElementById('console-modal').classList.remove('hidden');
+            loadRecentTasksForSelector();
+            if (taskId) {
+                attachConsoleToTask(taskId);
+            } else if (!currentEventSource && !activeTaskId) {
+                fetchWithAuth('/api/v1/admin/tasks?limit=1')
+                    .then(res => res.json())
+                    .then(tasks => {
+                        if (tasks && tasks.length > 0) {
+                            attachConsoleToTask(tasks[0].id, tasks[0].name);
+                        } else {
+                            document.getElementById('console-terminal').textContent = 'No background tasks have been executed yet.';
+                        }
+                    })
+                    .catch(e => console.error(e));
+            }
+        }
+
+        function closeConsoleModal() {
+            document.getElementById('console-modal').classList.add('hidden');
+            if (currentEventSource) {
+                currentEventSource.close();
+                currentEventSource = null;
+            }
+        }
+
+        function clearConsoleView() {
+            terminalLogs = [];
+            document.getElementById('console-terminal').textContent = '';
+            document.getElementById('console-line-count').textContent = '0 lines';
+        }
+
+        function copyConsoleLogs() {
+            const text = terminalLogs.join('\n');
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Logs copied to clipboard', 'info', 2000);
+            }).catch(err => {
+                showToast('Failed to copy logs: ' + err, 'error');
+            });
+        }
+
+        async function cancelCurrentTask() {
+            if (!activeTaskId) return;
+            if (!confirm('Are you sure you want to cancel this task?')) return;
+            try {
+                const res = await fetchWithAuth(`/api/v1/admin/tasks/${activeTaskId}/cancel`, { method: 'POST' });
+                const data = await res.json();
+                showToast(data.message || 'Cancellation requested', 'warning');
+            } catch (e) {
+                showToast('Error cancelling task: ' + e, 'error');
+            }
+        }
+
+        async function loadRecentTasksForSelector() {
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/tasks?limit=10');
+                if (!res.ok) return;
+                const tasks = await res.json();
+                const sel = document.getElementById('console-task-selector');
+                if (tasks.length > 0) {
+                    sel.style.display = 'inline-block';
+                    sel.innerHTML = tasks.map(t => `<option value="${t.id}" ${t.id === activeTaskId ? 'selected' : ''}>${t.name} (${t.status})</option>`).join('');
+                } else {
+                    sel.style.display = 'none';
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function attachConsoleToTask(taskId, taskName) {
+            if (!taskId) return;
+            activeTaskId = taskId;
+            document.getElementById('console-modal').classList.remove('hidden');
+            document.getElementById('console-task-title').textContent = taskName || `Task ${taskId.slice(0, 8)}`;
+            document.getElementById('console-task-subtitle').textContent = `Task ID: ${taskId}`;
+
+            const badge = document.getElementById('console-status-badge');
+            badge.textContent = 'CONNECTING';
+            badge.style.background = '#3b82f6';
+
+            const cancelBtn = document.getElementById('console-cancel-btn');
+            cancelBtn.style.display = 'none';
+
+            const progressContainer = document.getElementById('console-progress-container');
+            const progressBar = document.getElementById('console-progress-bar');
+            const progressPercent = document.getElementById('console-progress-percent');
+            const progressMsg = document.getElementById('console-progress-message');
+
+            progressContainer.style.display = 'none';
+            progressBar.style.width = '0%';
+            progressPercent.textContent = '0%';
+            progressMsg.textContent = 'Connecting...';
+
+            const terminal = document.getElementById('console-terminal');
+            terminalLogs = [];
+            terminal.textContent = 'Connecting to task event stream...\n';
+            document.getElementById('console-line-count').textContent = '0 lines';
+
+            if (currentEventSource) {
+                currentEventSource.close();
+                currentEventSource = null;
+            }
+
+            const streamUrl = `/api/v1/admin/tasks/${taskId}/stream?token=${encodeURIComponent(authToken)}`;
+            const es = new EventSource(streamUrl);
+            currentEventSource = es;
+
+            const appendLog = (line) => {
+                terminalLogs.push(line);
+                terminal.textContent = terminalLogs.join('\n');
+                document.getElementById('console-line-count').textContent = `${terminalLogs.length} lines`;
+                if (autoScrollTerminal) {
+                    terminal.scrollTop = terminal.scrollHeight;
+                }
+            };
+
+            const updateStatusBadge = (status) => {
+                const s = (status || '').toLowerCase();
+                badge.textContent = s.toUpperCase();
+                if (s === 'running') {
+                    badge.style.background = '#3b82f6';
+                    cancelBtn.style.display = 'inline-block';
+                } else if (s === 'completed') {
+                    badge.style.background = '#22c55e';
+                    cancelBtn.style.display = 'none';
+                } else if (s === 'failed') {
+                    badge.style.background = '#ef4444';
+                    cancelBtn.style.display = 'none';
+                } else if (s === 'cancelled') {
+                    badge.style.background = '#f59e0b';
+                    cancelBtn.style.display = 'none';
+                } else {
+                    badge.style.background = '#71717a';
+                    cancelBtn.style.display = 'none';
+                }
+            };
+
+            let wasRunning = false;
+
+            es.addEventListener('init', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    document.getElementById('console-task-title').textContent = data.name || 'Task';
+                    updateStatusBadge(data.status);
+                    if (data.status === 'running') {
+                        wasRunning = true;
+                    }
+                    terminalLogs = [];
+                    if (data.logs && data.logs.length > 0) {
+                        data.logs.forEach(log => {
+                            terminalLogs.push(`[${log.timestamp || ''}] [${(log.level || 'INFO').toUpperCase()}] ${log.message}`);
+                        });
+                    } else {
+                        terminalLogs.push(`Task initialized: ${data.name}`);
+                    }
+                    terminal.textContent = terminalLogs.join('\n');
+                    document.getElementById('console-line-count').textContent = `${terminalLogs.length} lines`;
+                    if (autoScrollTerminal) terminal.scrollTop = terminal.scrollHeight;
+
+                    if (data.progress && data.progress.percentage !== undefined) {
+                        progressContainer.style.display = 'block';
+                        progressBar.style.width = `${data.progress.percentage}%`;
+                        progressPercent.textContent = `${data.progress.percentage}%`;
+                        progressMsg.textContent = `${data.progress.message || 'Processing...'} (${data.progress.current || 0}/${data.progress.total || 0})`;
+                    }
+                } catch (err) {
+                    console.error('Init parse error', err);
+                }
+            });
+
+            es.addEventListener('log', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    appendLog(`[${data.timestamp || ''}] [${(data.level || 'INFO').toUpperCase()}] ${data.message}`);
+                } catch (err) {
+                    appendLog(e.data);
+                }
+            });
+
+            es.addEventListener('progress', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    progressContainer.style.display = 'block';
+                    progressBar.style.width = `${data.percentage}%`;
+                    progressPercent.textContent = `${data.percentage}%`;
+                    progressMsg.textContent = `${data.message || 'Processing...'} (${data.current || 0}/${data.total || 0})`;
+                } catch (err) {
+                    console.error('Progress parse error', err);
+                }
+            });
+
+            es.addEventListener('status', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    updateStatusBadge(data.status);
+                    if (wasRunning) {
+                        if (data.status === 'completed') {
+                            showToast(`Task "${document.getElementById('console-task-title').textContent}" completed successfully!`, 'success');
+                            loadGames();
+                            loadSystemStatus();
+                            loadTasksList();
+                            pollActiveTasks();
+                        } else if (data.status === 'failed') {
+                            showToast(`Task "${document.getElementById('console-task-title').textContent}" failed: ${data.error || 'Unknown error'}`, 'error');
+                            loadSystemStatus();
+                            loadTasksList();
+                            pollActiveTasks();
+                        } else if (data.status === 'cancelled') {
+                            showToast(`Task "${document.getElementById('console-task-title').textContent}" was cancelled`, 'warning');
+                            loadTasksList();
+                            pollActiveTasks();
+                        }
+                    }
+                    if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
+                        if (currentEventSource) {
+                            currentEventSource.close();
+                            currentEventSource = null;
+                        }
+                    }
+                } catch (err) {
+                    console.error('Status parse error', err);
+                }
+            });
+
+            es.onerror = (err) => {
+                console.warn('EventSource connection event', err);
+                const s = (document.getElementById('console-status-badge').textContent || '').toLowerCase();
+                if (s === 'completed' || s === 'failed' || s === 'cancelled') {
+                    if (currentEventSource) {
+                        currentEventSource.close();
+                        currentEventSource = null;
+                    }
+                }
+                pollActiveTasks();
+            };
+        }
+
+        async function pollActiveTasks() {
+            if (!authToken) return;
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/tasks/active');
+                if (!res.ok) return;
+                const tasks = await res.json();
+                const pill = document.getElementById('active-tasks-pill');
+                const text = document.getElementById('active-tasks-text');
+                if (tasks && tasks.length > 0) {
+                    pill.style.display = 'inline-flex';
+                    text.textContent = `${tasks.length} Running`;
+                } else {
+                    pill.style.display = 'none';
+                }
+            } catch (e) {
+                // quiet error
+            }
+        }
+
+        async function loadSystemStatus() {
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/system/status');
+                if (!res.ok) return;
+                const status = await res.json();
+
+                if (status.counts) {
+                    document.getElementById('diag-games-count').textContent = status.counts.games ?? '-';
+                    document.getElementById('diag-users-count').textContent = status.counts.users ?? '-';
+                    document.getElementById('diag-reviews-count').textContent = status.counts.reviews ?? '-';
+                    document.getElementById('diag-news-count').textContent = status.counts.news ?? '-';
+                }
+
+                if (status.disk) {
+                    document.getElementById('disk-path-label').textContent = `Directory: ${status.disk.data_dir || 'Data'}`;
+                    document.getElementById('disk-usage-label').textContent = `${status.disk.used_gb} / ${status.disk.total_gb} GB (${status.disk.percent_used}% used)`;
+                    const pb = document.getElementById('disk-progress-bar');
+                    pb.style.width = `${Math.min(100, status.disk.percent_used)}%`;
+                    if (status.disk.percent_used > 85) pb.style.background = '#ef4444';
+                    else if (status.disk.percent_used > 70) pb.style.background = '#f59e0b';
+                    else pb.style.background = '#3b82f6';
+                }
+
+                if (status.steamcmd) {
+                    const badge = document.getElementById('diag-steamcmd-badge');
+                    if (status.steamcmd.ready) {
+                        badge.textContent = 'Installed & Ready';
+                        badge.style.background = '#22c55e';
+                        badge.style.color = '#fff';
+                    } else {
+                        badge.textContent = 'Not Installed';
+                        badge.style.background = '#f59e0b';
+                        badge.style.color = '#000';
+                    }
+                    document.getElementById('diag-steamcmd-path').textContent = status.steamcmd.path || '';
+                }
+            } catch (e) {
+                console.error('Failed to load system status', e);
+            }
+        }
+
+        async function loadTasksList() {
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/tasks?limit=25');
+                if (!res.ok) return;
+                const tasks = await res.json();
+                const tbody = document.getElementById('tasks-tbody');
+                if (!tasks || tasks.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="color:#71717a; text-align:center; padding:20px;">No background tasks found</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = tasks.map(t => {
+                    const statusColors = {
+                        running: '#3b82f6',
+                        completed: '#22c55e',
+                        failed: '#ef4444',
+                        cancelled: '#f59e0b'
+                    };
+                    const color = statusColors[t.status] || '#71717a';
+                    const progressPct = t.progress ? `${t.progress.percentage}%` : '-';
+                    const started = t.created_at ? new Date(t.created_at).toLocaleTimeString() : '-';
+                    return `
+                        <tr>
+                            <td><code style="font-size:11px;">${t.id.slice(0, 8)}</code></td>
+                            <td><strong>${t.name}</strong></td>
+                            <td><span class="badge" style="background:${color}; text-transform:uppercase;">${t.status}</span></td>
+                            <td>
+                                <div style="font-size:11px; margin-bottom:3px;">${t.progress ? (t.progress.message || '') : ''} (${progressPct})</div>
+                                <div class="console-progress-track" style="height:4px;">
+                                    <div class="console-progress-bar" style="width:${t.progress ? t.progress.percentage : 0}%; background:${color};"></div>
+                                </div>
+                            </td>
+                            <td style="color:#a1a1aa; font-size:12px;">${started}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="secondary small" onclick="openConsoleModal('${t.id}')">Console</button>
+                                    ${t.status === 'running' ? `<button class="danger small" onclick="cancelTaskById('${t.id}')">Cancel</button>` : ''}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error('Failed to load tasks list', e);
+            }
+        }
+
+        async function cancelTaskById(taskId) {
+            if (!confirm(`Cancel task ${taskId.slice(0, 8)}?`)) return;
+            try {
+                const res = await fetchWithAuth(`/api/v1/admin/tasks/${taskId}/cancel`, { method: 'POST' });
+                const data = await res.json();
+                showToast(data.message || 'Cancelled', 'warning');
+                loadTasksList();
+                pollActiveTasks();
+            } catch (e) {
+                showToast('Error cancelling task: ' + e, 'error');
+            }
+        }
+
+        async function loadSteamConfig() {
+            try {
+                const res = await fetchWithAuth('/api/v1/admin/config');
+                if (!res.ok) return;
+                const configs = await res.json();
+                const map = {};
+                configs.forEach(c => map[c.key] = c);
+
+                if (map['steam_api_key'] && map['steam_api_key'].value) {
+                    const el = document.getElementById('steam-api-key');
+                    if (el && !el.value) {
+                        el.placeholder = 'Configured (Masked)';
+                    }
+                }
+                if (map['steam_username'] && map['steam_username'].value) {
+                    const el = document.getElementById('steam-username');
+                    if (el && !el.value) {
+                        el.value = map['steam_username'].value;
+                    }
+                }
+                if (map['steam_password'] && map['steam_password'].value) {
+                    const el = document.getElementById('steam-password');
+                    if (el && !el.value) {
+                        el.placeholder = '••••••••';
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to pre-populate steam config', e);
+            }
+        }
 
         // ============================================================
         // Games
@@ -1300,21 +2059,35 @@
             try {
                 const res = await fetchWithAuth('/api/v1/admin/scan-repository', { method: 'POST' });
                 const data = await res.json();
-                alert(data.message);
-                loadGames();
-            } catch (e) { alert('Error: ' + e); }
+                if (data.task_id) {
+                    showToast('Repository scan started in background', 'info');
+                    attachConsoleToTask(data.task_id, 'Repository Scan');
+                    pollActiveTasks();
+                } else {
+                    showToast(data.message || 'Scan initiated', 'info');
+                    loadGames();
+                }
+            } catch (e) {
+                showToast('Error: ' + e, 'error');
+            }
         }
 
         async function clearCatalog() {
             if (!confirm('Are you sure? This will delete ALL games from the database.')) return;
             const output = document.getElementById('clear-output');
             output.style.display = 'block';
+            output.textContent = 'Clearing catalog...';
             try {
                 const res = await fetchWithAuth('/api/v1/admin/clear-catalog', { method: 'DELETE' });
                 const data = await res.json();
                 output.textContent = JSON.stringify(data, null, 2);
+                showToast(data.message || 'Catalog cleared', 'warning');
                 loadGames();
-            } catch (e) { output.textContent = 'Error: ' + e; }
+                loadSystemStatus();
+            } catch (e) {
+                output.textContent = 'Error: ' + e;
+                showToast('Error: ' + e, 'error');
+            }
         }
 
         // ============================================================
@@ -1410,7 +2183,10 @@
                 const status = await res.json();
                 const statusDiv = document.getElementById('steamcmd-status');
                 if (status.executable_exists) {
-                    statusDiv.innerHTML = `<span style="color:#22c55e;">✓ SteamCMD installed</span><br><small style="color:#71717a;">${status.executable_path}</small>`;
+                    const tokenBadge = status.has_cached_token
+                        ? `<div style="margin-top:6px; color:#22c55e; font-size:0.9em; font-weight:500;">🔑 Saved Machine Token: Active (Password & Steam Guard 2FA bypassed for ${status.username || 'user'})</div>`
+                        : `<div style="margin-top:6px; color:#a1a1aa; font-size:0.9em;">🔑 Saved Machine Token: None (Login with credentials + Steam Guard code once to remember)</div>`;
+                    statusDiv.innerHTML = `<span style="color:#22c55e; font-weight:600;">✓ SteamCMD installed</span><br><small style="color:#71717a;">${status.executable_path}</small>${tokenBadge}`;
                 } else {
                     statusDiv.innerHTML = `<span style="color:#f59e0b;">⚠ SteamCMD not installed</span><br><small style="color:#71717a;">Path: ${status.path}</small>`;
                 }
@@ -1420,26 +2196,31 @@
         }
 
         async function downloadSteamCMD() {
-            if (!confirm('Download and install SteamCMD?')) return;
-            document.getElementById('steamcmd-status').innerHTML = '<span style="color:#3b82f6;">⏳ Downloading...</span>';
+            if (!confirm('Download and install SteamCMD? This runs in the background.')) return;
             try {
                 const res = await fetchWithAuth('/api/v1/admin/steamcmd/download', { method: 'POST' });
                 const data = await res.json();
-                if (data.status === 'success') {
-                    alert('SteamCMD downloaded successfully!');
-                    checkSteamCMDStatus();
+                if (data.task_id) {
+                    showToast('SteamCMD download started in background', 'info');
+                    attachConsoleToTask(data.task_id, 'SteamCMD Download');
+                    pollActiveTasks();
                 } else {
-                    alert('Failed: ' + data.message);
+                    showToast(data.message || 'SteamCMD download initiated', 'info');
                 }
-            } catch (e) { alert('Error: ' + e); }
+            } catch (e) {
+                showToast('Error: ' + e, 'error');
+            }
         }
 
         async function saveSteamApiKey() {
             const key = document.getElementById('steam-api-key').value;
             try {
                 await fetchWithAuth('/api/v1/admin/config/steam_api_key?value=' + encodeURIComponent(key), { method: 'PUT' });
-                alert('Steam API key saved!');
-            } catch (e) { alert('Error: ' + e); }
+                showToast('Steam API key saved!', 'success');
+                loadConfig();
+            } catch (e) {
+                showToast('Error: ' + e, 'error');
+            }
         }
 
         async function saveSteamCredentials() {
@@ -1448,51 +2229,46 @@
             try {
                 if (username) await fetchWithAuth('/api/v1/admin/config/steam_username?value=' + encodeURIComponent(username), { method: 'PUT' });
                 if (password) await fetchWithAuth('/api/v1/admin/config/steam_password?value=' + encodeURIComponent(password), { method: 'PUT' });
-                alert('Steam credentials saved!');
-            } catch (e) { alert('Error: ' + e); }
+                showToast('Steam credentials saved!', 'success');
+                loadConfig();
+            } catch (e) {
+                showToast('Error: ' + e, 'error');
+            }
         }
 
         async function testSteamLogin() {
             const code = document.getElementById('steam-guard-code').value.trim();
-            const outputPre = document.getElementById('login-output');
-            const container = document.getElementById('login-output-container');
-            const resultMsg = document.getElementById('login-result-msg');
-
-            container.style.display = 'block';
-            outputPre.textContent = 'Logging in...';
-            resultMsg.textContent = '';
-
             try {
                 const res = await fetchWithAuth('/api/v1/admin/steam/login', {
                     method: 'POST',
                     body: JSON.stringify({ steam_guard_code: code || null })
                 });
                 const data = await res.json();
-
-                outputPre.textContent = (data.stdout || '') + '\n' + (data.stderr || '');
-
-                if (data.status === 'success') {
-                    resultMsg.innerHTML = '<span style="color:#22c55e;">✅ Login Successful! SteamCMD is authenticated.</span>';
+                if (data.task_id) {
+                    showToast('Steam login test started in background', 'info');
+                    attachConsoleToTask(data.task_id, 'Steam Login Test');
+                    pollActiveTasks();
                 } else {
-                    resultMsg.innerHTML = `<span style="color:#ef4444;">❌ Login Failed (Exit Code ${data.exit_code}). See output above.</span>`;
+                    showToast(data.message || 'Steam login triggered', 'info');
                 }
             } catch (e) {
-                outputPre.textContent = 'Error: ' + e;
+                showToast('Error: ' + e, 'error');
             }
         }
 
         async function enrichSteam(gameId) {
-            if (!confirm('Fetch metadata from Steam? This will update game data.')) return;
             try {
                 const res = await fetchWithAuth(`/api/v1/admin/games/${gameId}/enrich-steam`, { method: 'POST' });
                 if (res.ok) {
-                    alert('Game enriched with Steam data!');
+                    showToast('Game enriched with Steam data!', 'success');
                     loadGames();
                 } else {
                     const err = await res.json();
-                    alert(err.detail || 'Failed to enrich from Steam');
+                    showToast(err.detail || 'Failed to enrich from Steam', 'error');
                 }
-            } catch (e) { alert('Error: ' + e); }
+            } catch (e) {
+                showToast('Error: ' + e, 'error');
+            }
         }
 
         async function enrichAllGames(fastMode) {
@@ -1502,101 +2278,66 @@
 
             if (!confirm(`Start ${mode}${skipMsg}? This runs in background.`)) return;
 
-            const output = document.getElementById('enrich-output');
-            output.style.display = 'block';
-            output.textContent = `Starting ${mode}${skipMsg}...`;
-
             try {
-                // Use rescan-all-metadata with fast_mode and force_update params
                 const url = `/api/v1/admin/games/rescan-all-metadata?fast_mode=${fastMode}&force_update=${forceUpdate}`;
                 const res = await fetchWithAuth(url, { method: 'POST' });
                 const data = await res.json();
-                output.textContent = JSON.stringify(data, null, 2);
+                if (data.task_id) {
+                    showToast(`Metadata enrichment started (${mode})`, 'info');
+                    attachConsoleToTask(data.task_id, `Metadata Enrichment (${mode})`);
+                    pollActiveTasks();
+                } else {
+                    showToast(data.message || 'Enrichment triggered', 'info');
+                }
             } catch (e) {
-                output.textContent = 'Error: ' + e;
+                showToast('Error: ' + e, 'error');
             }
         }
-
-        // Load Steam status when tab is shown
-        const origShowTab = showTab;
-        showTab = function (name) {
-            origShowTab(name);
-            if (name === 'steam') checkSteamCMDStatus();
-        };
 
         // ============================================================
         // Steam License Import & Search
         // ============================================================
 
         async function importSteamLicenses() {
-            if (!confirm('Import all owned paid games from Steam? This may take several minutes.')) return;
-
-            const statusDiv = document.getElementById('import-status');
-            const resultDiv = document.getElementById('import-result');
-            const statusText = document.getElementById('import-status-text');
-            const progressDiv = document.getElementById('import-progress');
-
-            statusDiv.style.display = 'block';
-            resultDiv.style.display = 'none';
-            statusText.textContent = 'Starting import...';
-            progressDiv.textContent = '';
-
+            const guardInput = document.getElementById('steam-guard-code');
+            const guardCode = guardInput ? guardInput.value.trim() : '';
+            const msg = 'Import all owned paid games from Steam? This runs in background.' + (guardCode ? ` (Using Steam Guard code: ${guardCode})` : '');
+            if (!confirm(msg)) return;
             try {
-                const res = await fetchWithAuth('/api/v1/admin/steam/import-licenses', { method: 'POST' });
+                const body = { batch_size: 50, delay_seconds: 1.0 };
+                if (guardCode) body.steam_guard_code = guardCode;
+                const res = await fetchWithAuth('/api/v1/admin/steam/import-licenses', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
                 const data = await res.json();
-
-                statusDiv.style.display = 'none';
-                resultDiv.style.display = 'block';
-
-                if (res.ok) {
-                    resultDiv.innerHTML = `
-                        <div style="color:#22c55e; font-weight: bold; margin-bottom: 8px;">✓ Import Complete</div>
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px;">
-                            <div>📦 Found: <strong>${data.total_found}</strong></div>
-                            <div>✅ Imported: <strong style="color:#22c55e;">${data.imported}</strong></div>
-                            <div>⏭️ Already Exist: <strong>${data.skipped_existing}</strong></div>
-                            <div>🆓 Free (skipped): <strong>${data.skipped_free}</strong></div>
-                            <div>⚠️ Invalid: <strong>${data.skipped_invalid}</strong></div>
-                            <div>❌ Errors: <strong style="color:#ef4444;">${data.errors?.length || 0}</strong></div>
-                        </div>
-                        ${data.games_added?.length ? `<div style="margin-top: 8px; color: #71717a;">Added: ${data.games_added.slice(0, 5).join(', ')}${data.games_added.length > 5 ? '...' : ''}</div>` : ''}
-                    `;
-                    loadGames();
+                if (data.task_id) {
+                    showToast('Steam license import started in background', 'info');
+                    attachConsoleToTask(data.task_id, 'Steam License Import');
+                    pollActiveTasks();
                 } else {
-                    resultDiv.innerHTML = `<div style="color:#ef4444;">❌ ${data.detail || 'Import failed'}</div>`;
+                    showToast(data.detail || data.message || 'Import triggered', 'error');
                 }
             } catch (e) {
-                statusDiv.style.display = 'none';
-                resultDiv.style.display = 'block';
-                resultDiv.innerHTML = `<div style="color:#ef4444;">❌ Error: ${e.message || e}</div>`;
+                showToast('Error: ' + e, 'error');
             }
         }
 
         async function checkImportStatus() {
             try {
-                const res = await fetchWithAuth('/api/v1/admin/steam/import-licenses/status');
-                const status = await res.json();
-
-                const statusDiv = document.getElementById('import-status');
-                const statusText = document.getElementById('import-status-text');
-                const progressDiv = document.getElementById('import-progress');
-
-                if (status.running) {
-                    statusDiv.style.display = 'block';
-                    statusText.textContent = status.phase || 'Running...';
-                    progressDiv.textContent = status.total ? `Progress: ${status.progress}/${status.total}` : '';
-                } else if (status.phase === 'Complete') {
-                    statusDiv.style.display = 'none';
-                    alert('Import completed!');
-                } else if (status.error) {
-                    statusDiv.style.display = 'none';
-                    alert('Import error: ' + status.error);
+                const res = await fetchWithAuth('/api/v1/admin/tasks/active');
+                if (!res.ok) return;
+                const tasks = await res.json();
+                const importTask = tasks.find(t => t.type === 'import_licenses' || t.name.includes('Import'));
+                if (importTask) {
+                    showToast(`License import is currently running (${importTask.progress?.percentage || 0}%)`, 'info');
+                    attachConsoleToTask(importTask.id, importTask.name);
                 } else {
-                    statusDiv.style.display = 'none';
-                    alert('No import running');
+                    showToast('No license import currently running', 'info');
                 }
             } catch (e) {
-                alert('Error checking status: ' + e);
+                showToast('Error: ' + e, 'error');
             }
         }
 

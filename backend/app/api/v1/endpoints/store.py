@@ -24,12 +24,15 @@ def list_catalog(
     offset: int = 0,
     limit: int = 100,
     search: Optional[str] = None,
-    genres: List[str] = Query(None, alias="genre"),
-    categories: List[str] = Query(None, alias="category"),
+    genres: Optional[List[str]] = Query(None, alias="genre"),
+    genres_bracket: Optional[List[str]] = Query(None, alias="genre[]"),
+    categories: Optional[List[str]] = Query(None, alias="category"),
+    categories_bracket: Optional[List[str]] = Query(None, alias="category[]"),
     source: Optional[str] = None,
     platform: Optional[str] = None,
     sort_by: str = "title",
     sort_order: str = "asc",
+    order: Optional[str] = Query(None, description="Alias for sort_order"),
     session: Session = Depends(get_session)
 ):
     """
@@ -58,18 +61,26 @@ def list_catalog(
         )
     
     # Genre filter (AND logic - must match ALL selected genres)
-    if genres:
-        query = query.where(Game.genres.contains(genres))
+    raw_genres = (genres or []) + (genres_bracket or [])
+    clean_genres = []
+    for g in raw_genres:
+        for part in g.split(","):
+            part_clean = part.strip()
+            if part_clean and part_clean not in clean_genres:
+                clean_genres.append(part_clean)
+    if clean_genres:
+        query = query.where(Game.genres.contains(clean_genres))
     
     # Category filter (AND logic)
-    if categories:
-        for cat in categories:
-            query = query.where(
-                func.jsonb_path_exists(
-                    Game.categories,
-                    f'$[*] ? (@.description == "{cat}")'
-                )
-            )
+    raw_categories = (categories or []) + (categories_bracket or [])
+    clean_categories = []
+    for c in raw_categories:
+        for part in c.split(","):
+            part_clean = part.strip()
+            if part_clean and part_clean not in clean_categories:
+                clean_categories.append(part_clean)
+    for cat in clean_categories:
+        query = query.where(Game.categories.contains([{"description": cat}]))
     
     # Source filter
     if source:
@@ -82,8 +93,9 @@ def list_catalog(
         )
     
     # Sorting
+    effective_order = (order or sort_order or "asc").lower()
     sort_column = getattr(Game, sort_by, Game.title)
-    if sort_order == "desc":
+    if effective_order == "desc":
         query = query.order_by(sort_column.desc().nullslast())
     else:
         query = query.order_by(sort_column.asc().nullsfirst())
@@ -134,24 +146,12 @@ def get_featured_games(
     
     return games
 
-@router.get("/games/{game_id}", response_model=GameRead)
-def get_game(
-    game_id: int,
-    session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_current_user_optional)
-):
-    """
-    Get a single game by ID with full details including Steam data.
-    """
-    game = session.get(Game, game_id)
-    if not game:
-        raise HTTPException(status_code=404, detail="Game not found")
-    return game
-
 @router.get("/games/count")
 def get_game_count(
     search: Optional[str] = None,
     genre: Optional[str] = None,
+    categories: Optional[List[str]] = Query(None, alias="category"),
+    categories_bracket: Optional[List[str]] = Query(None, alias="category[]"),
     source: Optional[str] = None,
     session: Session = Depends(get_session)
 ):
@@ -169,12 +169,77 @@ def get_game_count(
             )
         )
     if genre:
-        query = query.where(Game.genres.contains([genre]))
+        clean_genres = [part.strip() for part in genre.split(",") if part.strip()]
+        if clean_genres:
+            query = query.where(Game.genres.contains(clean_genres))
+
+    raw_categories = (categories or []) + (categories_bracket or [])
+    clean_categories = []
+    for c in raw_categories:
+        for part in c.split(","):
+            part_clean = part.strip()
+            if part_clean and part_clean not in clean_categories:
+                clean_categories.append(part_clean)
+    for cat in clean_categories:
+        query = query.where(Game.categories.contains([{"description": cat}]))
+
     if source:
         query = query.where(Game.source == source)
     
     count = session.exec(query).one()
     return {"count": count}
+
+REVIEW_REFRESH_INTERVAL_DAYS = 3
+
+@router.get("/games/{game_id}", response_model=GameRead)
+async def get_game(
+    game_id: int,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    Get a single game by ID with full details including Steam data.
+    Lazily refreshes the Steam review summary and full achievement list
+    (both cheap, keyless calls) so the details page is accurate without a
+    full catalog re-enrichment.
+    """
+    game = session.get(Game, game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    if game.steam_app_id:
+        from datetime import datetime, timezone, timedelta
+        from app.services.steam_store import get_steam_store_service
+        steam = get_steam_store_service()
+        changed = False
+
+        updated_at = game.steam_reviews_updated_at
+        if updated_at is not None and updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+        if updated_at is None or datetime.now(timezone.utc) - updated_at > timedelta(days=REVIEW_REFRESH_INTERVAL_DAYS):
+            reviews = await steam.get_review_summary(game.steam_app_id)
+            if reviews:
+                for k, v in reviews.items():
+                    setattr(game, k, v)
+                changed = True
+
+        if game.achievements is None:
+            achievements = await steam.get_achievements(game.steam_app_id)
+            if achievements is not None:
+                game.achievements = achievements
+                game.achievements_total = len(achievements) or game.achievements_total
+                changed = True
+
+        if changed:
+            try:
+                session.add(game)
+                session.commit()
+                session.refresh(game)
+            except Exception as e:
+                logger.warning(f"Failed to persist lazy Steam refresh for game {game_id}: {e}")
+                session.rollback()
+
+    return game
 
 @router.get("/genres")
 def list_genres(session: Session = Depends(get_session)):
@@ -282,18 +347,55 @@ def get_trending_games(
 
 @router.get("/top-rated", response_model=List[GameRead])
 def get_top_rated_games(
-    limit: int = 10,
+    limit: int = Query(10, ge=0, description="Number of games to return"),
+    sort_by: Optional[str] = Query("steam_score", description="Sort dimension: 'steam_score', 'metacritic', or 'igdb'"),
+    dimension: Optional[str] = Query(None, description="Alias for sort_by parameter"),
     session: Session = Depends(get_session)
 ):
     """
-    Get highest rated games by Metacritic score.
+    Get highest rated games across selectable rating dimensions.
+    Supported sort dimensions:
+    - steam_score (default): Orders by Steam positive percentage (descending) with review count tie-breaker.
+      When steam_review_percent is null, orders by steam_review_count descending.
+    - metacritic: Orders by Metacritic score descending.
+    - igdb: Orders by IGDB aggregate rating descending.
     """
-    query = select(Game).where(
-        Game.metacritic_score.isnot(None)
-    ).order_by(
-        Game.metacritic_score.desc()
-    ).limit(limit)
-    
+    chosen_sort = (dimension or sort_by or "steam_score").lower().strip()
+
+    if chosen_sort in ("steam_score", "steam", "steam_reviews"):
+        query = select(Game).where(
+            or_(
+                Game.steam_review_percent.isnot(None),
+                Game.steam_review_count.isnot(None)
+            )
+        ).order_by(
+            Game.steam_review_percent.desc().nullslast(),
+            Game.steam_review_count.desc().nullslast(),
+            Game.title.asc()
+        ).limit(limit)
+
+    elif chosen_sort in ("metacritic", "metacritic_score"):
+        query = select(Game).where(
+            Game.metacritic_score.isnot(None)
+        ).order_by(
+            Game.metacritic_score.desc().nullslast(),
+            Game.title.asc()
+        ).limit(limit)
+
+    elif chosen_sort in ("igdb", "igdb_score", "rating"):
+        query = select(Game).where(
+            Game.rating.isnot(None)
+        ).order_by(
+            Game.rating.desc().nullslast(),
+            Game.title.asc()
+        ).limit(limit)
+
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid sort option '{chosen_sort}'. Valid options are: steam_score, metacritic, igdb"
+        )
+
     return session.exec(query).all()
 
 # ============================================================
@@ -308,22 +410,69 @@ from urllib.parse import urlparse
 # Allowlist of domains the proxy is permitted to fetch from.
 # Only trusted external CDNs/APIs should be listed here to prevent SSRF.
 PROXY_ALLOWED_DOMAINS = {
-    "cdn.akamai.steamstatic.com",
+    # Fastly CDN
+    "shared.fastly.steamstatic.com",
+    "cdn.fastly.steamstatic.com",
+    "video.fastly.steamstatic.com",
+    "clan.fastly.steamstatic.com",
+    "community.fastly.steamstatic.com",
+    "avatars.fastly.steamstatic.com",
+    "store.fastly.steamstatic.com",
+    "client-update.fastly.steamstatic.com",
+    # Akamai CDN
     "shared.akamai.steamstatic.com",
-    "steamcdn-a.akamaihd.net",
+    "cdn.akamai.steamstatic.com",
+    "video.akamai.steamstatic.com",
+    "clan.akamai.steamstatic.com",
+    "community.akamai.steamstatic.com",
+    "avatars.akamai.steamstatic.com",
+    "store.akamai.steamstatic.com",
+    "client-update.akamai.steamstatic.com",
+    # Cloudflare CDN
+    "shared.cloudflare.steamstatic.com",
     "cdn.cloudflare.steamstatic.com",
+    "video.cloudflare.steamstatic.com",
+    "clan.cloudflare.steamstatic.com",
+    "community.cloudflare.steamstatic.com",
+    "avatars.cloudflare.steamstatic.com",
+    "store.cloudflare.steamstatic.com",
+    # Steamstatic Root & Subdomains
+    "avatars.steamstatic.com",
+    "clan.steamstatic.com",
+    "cdn.steamstatic.com",
+    "shared.steamstatic.com",
+    "community.steamstatic.com",
+    "store.steamstatic.com",
+    "video.steamstatic.com",
+    # Legacy AkamaiHD
+    "steamcdn-a.akamaihd.net",
+    "steamuserimages-a.akamaihd.net",
+    "steamcommunity-a.akamaihd.net",
+    # Core Valve & External Media
     "store.steampowered.com",
     "steamcommunity.com",
-    "clan.akamai.steamstatic.com",
-    "images.igdb.com",
     "media.steampowered.com",
-    "video.akamai.steamstatic.com",
-    "video.cloudflare.steamstatic.com",
+    "images.igdb.com",
 }
+
+def _is_proxy_domain_allowed(hostname: str) -> bool:
+    """Check hostname against explicit allowlist and safe wildcard patterns."""
+    if not hostname:
+        return False
+    h = hostname.lower()
+    if h in PROXY_ALLOWED_DOMAINS:
+        return True
+    # Allow any subdomain under *.steamstatic.com
+    if h.endswith(".steamstatic.com"):
+        return True
+    # Allow any steam subdomain under *.akamaihd.net
+    if (h.endswith("-a.akamaihd.net") or h.endswith(".akamaihd.net")) and h.startswith("steam"):
+        return True
+    return False
 
 def _validate_proxy_url(url: str) -> str:
     """Validate a URL against the allowed proxy domains. Raises HTTPException if not allowed."""
-    if not url.startswith("https://") and not url.startswith("http://"):
+    if not url or (not url.startswith("https://") and not url.startswith("http://")):
         raise HTTPException(status_code=400, detail="Invalid URL: must start with http:// or https://")
     
     parsed = urlparse(url)
@@ -331,8 +480,8 @@ def _validate_proxy_url(url: str) -> str:
     if not hostname:
         raise HTTPException(status_code=400, detail="Invalid URL: no hostname")
     
-    # Check against allowlist
-    if hostname not in PROXY_ALLOWED_DOMAINS:
+    # Check against allowlist and safe patterns
+    if not _is_proxy_domain_allowed(hostname):
         raise HTTPException(
             status_code=403,
             detail=f"Domain '{hostname}' is not in the allowed proxy list"
@@ -361,11 +510,10 @@ async def proxy_image(url: str):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
-    async with httpx.AsyncClient(follow_redirects=True) as client:
+    async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
         try:
             r = await client.get(url, headers=headers)
-        except Exception as e:
-            # logger.info(f"Proxy Request Failed: {e}") # Debug only
+        except Exception:
             raise HTTPException(status_code=500, detail="Proxy Request Failed")
 
         if r.status_code != 200:
@@ -395,7 +543,7 @@ async def proxy_image_base64(url: str):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
-    async with httpx.AsyncClient(follow_redirects=True) as client:
+    async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
         try:
             r = await client.get(url, headers=headers)
         except Exception as e:
@@ -411,7 +559,7 @@ async def proxy_image_base64(url: str):
                 "mime": media_type,
                 "data": b64
             }
-        except Exception as e:
+        except Exception:
              raise HTTPException(status_code=500, detail="Encoding Error")
 
 @router.get("/proxy/video")
@@ -423,7 +571,8 @@ async def proxy_video(url: str, request: Request):
     _validate_proxy_url(url)
         
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Encoding": "identity",
     }
     
     # Forward Range header (Critical for seeking)
@@ -431,7 +580,7 @@ async def proxy_video(url: str, request: Request):
     if range_header:
         headers["Range"] = range_header
 
-    client = httpx.AsyncClient(follow_redirects=True)
+    client = httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(30.0, connect=10.0))
     try:
         req = client.build_request("GET", url, headers=headers)
         r = await client.send(req, stream=True)

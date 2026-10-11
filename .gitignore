@@ -101,6 +101,7 @@ test library/
 temp_body.json
 *.bak
 *.orig
+.agents/
 
 # ============================================
 # Build Artifacts

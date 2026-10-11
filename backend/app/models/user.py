@@ -1,7 +1,10 @@
 from typing import Optional, List
 from sqlmodel import Field, SQLModel, Column
 from sqlalchemy import ARRAY, Text, Integer
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 class UserBase(SQLModel):
     username: str = Field(unique=True, index=True, max_length=50)
@@ -22,7 +25,7 @@ class User(UserBase, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     password_hash: str = Field(max_length=255)
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=utc_now)
     last_login: Optional[datetime] = None
 
 class UserCreate(SQLModel):
@@ -73,7 +76,7 @@ class UserSession(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.id")
     token: str = Field(unique=True, max_length=255, index=True)
     expires_at: datetime
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=utc_now)
     ip_address: Optional[str] = Field(default=None, max_length=45)
     user_agent: Optional[str] = None
 

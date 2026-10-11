@@ -4,7 +4,7 @@ Uses the public store.steampowered.com/api/appdetails endpoint.
 No API key required, rate limit: 200 requests per 5 minutes.
 """
 import httpx
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 import asyncio
 import logging
 
@@ -30,7 +30,11 @@ class SteamStoreService:
         batch = await self._get_app_details_batch_http([app_id])
         return batch.get(app_id)
 
-    async def get_app_details_batch(self, app_ids: List[int]) -> Dict[int, Optional[Dict[str, Any]]]:
+    async def get_app_details_batch(
+        self,
+        app_ids: List[int],
+        progress_callback: Optional[Callable[[int, int], Any]] = None
+    ) -> Dict[int, Optional[Dict[str, Any]]]:
         """
         Fetch details for multiple apps using PICS (Fast Lane).
         Uses the persistent Steam Client.
@@ -39,7 +43,7 @@ class SteamStoreService:
         client_svc = get_steam_client()
         
         # PICS Fetch
-        pics_data = await client_svc.get_product_info(app_ids)
+        pics_data = await client_svc.get_product_info(app_ids, progress_callback=progress_callback)
         
         results = {}
         for app_id in app_ids:
@@ -325,8 +329,91 @@ class SteamStoreService:
         if not raw_data:
             return None
         
+        parsed = self.parse_game_data(raw_data)
+
+        # Authoritative review summary (store appdetails only exposes a raw count)
+        reviews = await self.get_review_summary(app_id)
+        if reviews:
+            parsed.update(reviews)
+
+        # Full achievement list with descriptions, hidden flags and global unlock %
+        if raw_data.get("achievements", {}).get("total"):
+            achievements = await self.get_achievements(app_id)
+            if achievements:
+                parsed["achievements"] = achievements
+                parsed["achievements_total"] = len(achievements)
+
         await asyncio.sleep(RATE_LIMIT_DELAY)  # Rate limiting
-        return self.parse_game_data(raw_data)
+        return parsed
+
+    async def get_review_summary(self, app_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Fetch Steam's own review summary (same numbers as the store page).
+        Returns steam_review_count / steam_review_percent / steam_review_desc.
+        """
+        from datetime import datetime, timezone
+        try:
+            r = await self.client.get(
+                f"https://store.steampowered.com/appreviews/{app_id}",
+                params={"json": 1, "language": "all", "purchase_type": "all",
+                        "filter": "all", "num_per_page": 0},
+            )
+            if r.status_code != 200:
+                return None
+            summary = r.json().get("query_summary") or {}
+            total = summary.get("total_reviews") or 0
+            positive = summary.get("total_positive") or 0
+            if total <= 0:
+                return {
+                    "steam_review_count": 0,
+                    "steam_review_percent": None,
+                    "steam_review_desc": summary.get("review_score_desc") or "No user reviews",
+                    "steam_reviews_updated_at": datetime.now(timezone.utc),
+                }
+            return {
+                "steam_review_count": total,
+                "steam_review_percent": round(positive * 100 / total),
+                "steam_review_desc": summary.get("review_score_desc"),
+                "steam_reviews_updated_at": datetime.now(timezone.utc),
+            }
+        except Exception as e:
+            logger.warning(f"Steam review summary failed for {app_id}: {e}")
+            return None
+
+    async def get_achievements(self, app_id: int) -> Optional[List[Dict[str, Any]]]:
+        """
+        Fetch the full achievement list (names, descriptions, icons, hidden flag,
+        global unlock %) via IPlayerService/GetGameAchievements (no API key needed).
+        """
+        try:
+            r = await self.client.get(
+                "https://api.steampowered.com/IPlayerService/GetGameAchievements/v1/",
+                params={"appid": app_id, "language": "english"},
+            )
+            if r.status_code != 200:
+                return None
+            items = (r.json().get("response") or {}).get("achievements") or []
+            base = f"https://shared.fastly.steamstatic.com/community_assets/images/apps/{app_id}/"
+            result = []
+            for a in items:
+                try:
+                    pct = float(a.get("player_percent_unlocked") or 0)
+                except (TypeError, ValueError):
+                    pct = None
+                result.append({
+                    "api_name": a.get("internal_name"),
+                    "name": a.get("localized_name") or a.get("internal_name"),
+                    "description": a.get("localized_desc") or "",
+                    "icon": base + a["icon"] if a.get("icon") else None,
+                    "icon_gray": base + a["icon_gray"] if a.get("icon_gray") else None,
+                    "hidden": bool(a.get("hidden")),
+                    "percent": pct,
+                })
+            result.sort(key=lambda x: x["percent"] if x["percent"] is not None else -1, reverse=True)
+            return result
+        except Exception as e:
+            logger.warning(f"Steam achievements fetch failed for {app_id}: {e}")
+            return None
     
     async def close(self):
         """Close the HTTP client."""

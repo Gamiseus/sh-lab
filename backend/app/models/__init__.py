@@ -25,11 +25,6 @@ from app.models.request import (
     GameRequestRead, GameRequestReadAdmin
 )
 
-from app.models.server import (
-    DedicatedServer, DedicatedServerBase, DedicatedServerCreate,
-    DedicatedServerUpdate, DedicatedServerRead, DedicatedServerStatus
-)
-
 from app.models.config import (
     SystemConfig, SystemConfigRead, SystemConfigUpdate,
     get_config_bool, get_config_int
@@ -56,9 +51,6 @@ __all__ = [
     # Request
     "GameRequest", "GameRequestBase", "GameRequestCreate", "GameRequestUpdate",
     "GameRequestRead", "GameRequestReadAdmin",
-    # Server
-    "DedicatedServer", "DedicatedServerBase", "DedicatedServerCreate",
-    "DedicatedServerUpdate", "DedicatedServerRead", "DedicatedServerStatus",
     # Config
     "SystemConfig", "SystemConfigRead", "SystemConfigUpdate",
     "get_config_bool", "get_config_int",

@@ -2,7 +2,10 @@ from typing import Optional, List, Dict, Any
 from sqlmodel import Field, SQLModel, Column
 from sqlalchemy import Text
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 class GameBase(SQLModel):
     title: str = Field(index=True)
@@ -57,6 +60,8 @@ class GameBase(SQLModel):
     # Achievements
     achievements_total: Optional[int] = None
     achievements_highlighted: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSONB))
+    # Full achievement list: [{api_name, name, description, icon, icon_gray, hidden, percent}]
+    achievements: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSONB))
     
     # System Requirements (HTML strings)
     pc_requirements: Optional[str] = None
@@ -66,6 +71,8 @@ class GameBase(SQLModel):
     # Steam Reviews
     steam_review_count: Optional[int] = None
     steam_review_percent: Optional[int] = None
+    steam_review_desc: Optional[str] = None  # Valve label, e.g. "Overwhelmingly Positive"
+    steam_reviews_updated_at: Optional[datetime] = None
     
     # Price
     price_cents: Optional[int] = None
@@ -83,8 +90,8 @@ class GameBase(SQLModel):
     size_bytes: Optional[int] = None
     
     # Timestamps
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=utc_now)
+    updated_at: Optional[datetime] = Field(default_factory=utc_now)
 
 class Game(GameBase, table=True):
     __tablename__ = "game"

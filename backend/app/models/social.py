@@ -1,6 +1,9 @@
 from typing import Optional
 from sqlmodel import Field, SQLModel
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 # ============================================================
 # User Playtime - Tracks per-user, per-game play statistics
@@ -16,7 +19,7 @@ class UserPlaytime(SQLModel, table=True):
     last_played: Optional[datetime] = None
     last_session_minutes: int = Field(default=0)
     sessions_count: int = Field(default=0)
-    first_played: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    first_played: Optional[datetime] = Field(default_factory=utc_now)
 
 class UserPlaytimeRead(SQLModel):
     """Schema for reading playtime data"""
@@ -43,7 +46,7 @@ class Friendship(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.id")
     friend_id: int = Field(foreign_key="users.id")
     status: str = Field(default="pending")  # 'pending', 'accepted', 'blocked'
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=utc_now)
     updated_at: Optional[datetime] = None
 
 class FriendshipCreate(SQLModel):

@@ -45,7 +45,7 @@ app.add_middleware(
 
 # Serve static media files (covers, backgrounds)
 # Renamed from 'media' to 'metadata' as per Phase 6 architecture
-for path in ["/data/metadata", "/data/profiles", "/data/server"]:
+for path in ["/data/metadata", "/data/profiles"]:
     if not os.path.exists(path):
         try:
             os.makedirs(path, exist_ok=True)
@@ -54,7 +54,6 @@ for path in ["/data/metadata", "/data/profiles", "/data/server"]:
 
 app.mount("/metadata", StaticFiles(directory="/data/metadata"), name="metadata")
 app.mount("/profiles", StaticFiles(directory="/data/profiles"), name="profiles")
-app.mount("/server", StaticFiles(directory="/data/server"), name="server")
 
 # Admin Dashboard
 if not os.path.exists("app/static"):

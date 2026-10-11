@@ -1,8 +1,12 @@
 import logging
 import os
-from typing import List, Optional
+import asyncio
+import json
+import platform
+from typing import List, Optional, Any, Dict
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from starlette.responses import StreamingResponse
 from sqlmodel import Session, select, or_
 from pydantic import BaseModel
 from app.core.db import get_session
@@ -14,10 +18,191 @@ from app.models.user import User, UserRead, UserCreate
 from app.models.config import SystemConfig
 from app.services.igdb import IGDBClient
 from app.services.metadata import MetadataService
+from app.services.task_manager import task_manager
+from app.services.steam_licenses import SteamLicenseService, search_steam_store
 
 logger = logging.getLogger(__name__)
 
+# Global license service instance for status tracking and token inspection
+_license_service = SteamLicenseService()
+
 router = APIRouter()
+
+# ============================================================
+# Task Management & Real-Time Console Streaming Endpoints
+# ============================================================
+
+@router.get("/tasks")
+async def list_admin_tasks(
+    admin: User = Depends(require_admin)
+):
+    """List recent background tasks."""
+    return task_manager.get_all_tasks(limit=30)
+
+@router.get("/tasks/active")
+async def get_active_tasks(
+    admin: User = Depends(require_admin)
+):
+    """List currently active running tasks."""
+    return task_manager.get_active_tasks()
+
+@router.get("/tasks/{task_id}")
+async def get_task_details(
+    task_id: str,
+    admin: User = Depends(require_admin)
+):
+    """Get full details and logs for a task."""
+    task = task_manager.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    data = task.to_dict()
+    data["logs"] = task.logs
+    return data
+
+@router.post("/tasks/{task_id}/cancel")
+async def cancel_admin_task(
+    task_id: str,
+    admin: User = Depends(require_admin)
+):
+    """Cancel a running background task."""
+    task = task_manager.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.cancel()
+    return {"status": "success", "message": f"Task {task_id} cancellation requested"}
+
+@router.get("/tasks/{task_id}/stream")
+async def stream_task_events(
+    task_id: str,
+    token: Optional[str] = None,
+    session: Session = Depends(get_session)
+):
+    """
+    Server-Sent Events (SSE) stream for live task logs and progress.
+    Supports query parameter 'token' for browser EventSource.
+    """
+    user = None
+    if token:
+        from app.core.security import decode_token
+        payload = decode_token(token)
+        if payload and "sub" in payload:
+            sub_val = payload["sub"]
+            try:
+                user = session.get(User, int(sub_val))
+            except (ValueError, TypeError):
+                user = session.exec(select(User).where(User.username == sub_val)).first()
+
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=401, detail="Admin authorization required")
+
+    task = task_manager.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    async def event_generator():
+        q = asyncio.Queue(maxsize=100)
+        task._subscribers.append(q)
+        try:
+            init_payload = {
+                "id": task.id,
+                "type": task.type,
+                "name": task.name,
+                "status": task.status,
+                "progress": task.progress,
+                "logs": task.logs
+            }
+            yield f"event: init\ndata: {json.dumps(init_payload)}\n\n"
+
+            if task.status != "running":
+                yield f"event: status\ndata: {json.dumps({'status': task.status, 'result': task.result, 'error': task.error})}\n\n"
+                return
+
+            while True:
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=15.0)
+                    yield f"event: {event['type']}\ndata: {json.dumps(event['data'])}\n\n"
+                    if event["type"] == "status" and event["data"].get("status") in ("completed", "failed", "cancelled"):
+                        break
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+                    if task.status != "running":
+                        break
+        finally:
+            if q in task._subscribers:
+                task._subscribers.remove(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+@router.get("/system/status")
+async def get_system_status(
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin)
+):
+    """System health check, diagnostics, and counts for admin dashboard."""
+    from app.models.review import Review
+    from app.models.news import NewsPost
+    import shutil
+
+    games_count = len(session.exec(select(Game.id)).all())
+    users_count = len(session.exec(select(User.id)).all())
+    reviews_count = len(session.exec(select(Review.id)).all())
+    news_count = len(session.exec(select(NewsPost.id)).all())
+
+    path_config = session.get(SystemConfig, "steamcmd_path")
+    steamcmd_path = path_config.value if path_config else "./steamcmd"
+    is_windows = platform.system() == "Windows"
+    exe_name = "steamcmd.exe" if is_windows else "steamcmd.sh"
+    steamcmd_exe = os.path.join(steamcmd_path, exe_name)
+    steamcmd_ready = os.path.exists(steamcmd_exe)
+
+    data_dir = settings.DATA_DIR
+    disk_total = 0
+    disk_free = 0
+    if os.path.exists(data_dir):
+        try:
+            total, used, free = shutil.disk_usage(data_dir)
+            disk_total = round(total / (1024**3), 1)
+            disk_free = round(free / (1024**3), 1)
+        except Exception:
+            pass
+
+    return {
+        "status": "healthy",
+        "counts": {
+            "games": games_count,
+            "users": users_count,
+            "reviews": reviews_count,
+            "news": news_count
+        },
+        "steamcmd": {
+            "ready": steamcmd_ready,
+            "path": steamcmd_exe
+        },
+        "storage": {
+            "data_dir": data_dir,
+            "repo_dir": settings.GAMES_REPO_PATH,
+            "total_gb": disk_total,
+            "free_gb": disk_free,
+            "used_gb": round(max(0.0, disk_total - disk_free), 1),
+            "percent_used": round(((disk_total - disk_free) / disk_total * 100), 1) if disk_total > 0 else 0
+        },
+        "disk": {
+            "data_dir": data_dir,
+            "total_gb": disk_total,
+            "free_gb": disk_free,
+            "used_gb": round(max(0.0, disk_total - disk_free), 1),
+            "percent_used": round(((disk_total - disk_free) / disk_total * 100), 1) if disk_total > 0 else 0
+        },
+        "active_tasks": len(task_manager.get_active_tasks())
+    }
 
 # ============================================================
 # User Management Schemas
@@ -182,14 +367,23 @@ async def update_config(
     session: Session = Depends(get_session),
     admin: User = Depends(require_admin)
 ):
-    """Update a system configuration value (admin only)."""
+    """Update or create a system configuration value (admin only)."""
     cfg = session.get(SystemConfig, key)
+    is_secret = key in ("steam_password", "steam_api_key", "secret_key", "igdb_client_secret")
     if not cfg:
-        raise HTTPException(status_code=404, detail=f"Config key '{key}' not found")
-    
-    cfg.value = value
-    cfg.updated_by = admin.id
-    session.add(cfg)
+        cfg = SystemConfig(
+            key=key,
+            value=value,
+            value_type="string",
+            description=f"Setting for {key}",
+            is_secret=is_secret,
+            updated_by=admin.id
+        )
+        session.add(cfg)
+    else:
+        cfg.value = value
+        cfg.updated_by = admin.id
+        session.add(cfg)
     session.commit()
     return {"status": "success", "message": f"Config '{key}' updated"}
 
@@ -362,11 +556,21 @@ async def delete_game(
     session: Session = Depends(get_session),
     admin: User = Depends(require_admin)
 ):
-    """Delete a game (admin only)."""
+    """Delete a game (admin only). Safely cleans up dependent reviews and playtime."""
     game = session.get(Game, game_id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
     
+    from app.models.review import Review
+    from app.models.social import UserPlaytime
+
+    reviews = session.exec(select(Review).where(Review.game_id == game_id)).all()
+    for r in reviews:
+        session.delete(r)
+    playtimes = session.exec(select(UserPlaytime).where(UserPlaytime.game_id == game_id)).all()
+    for p in playtimes:
+        session.delete(p)
+
     title = game.title
     session.delete(game)
     session.commit()
@@ -406,59 +610,78 @@ async def rescan_all_metadata(
 ):
     """
     Rescan metadata for ALL games in catalog.
-    Runs in background to avoid timeouts.
-    fast_mode=True: Skips Steam Store API (faster, uses IGDB only).
-    force_update=True: Update games even if they already have IGDB data.
+    Runs asynchronously with real-time SSE progress & log streaming.
     """
-    background_tasks.add_task(background_rescan_all_task, fast_mode, force_update)
+    active = [t for t in task_manager.get_active_tasks() if t["type"] == "enrich_all"]
+    if active:
+        return {"status": "already_running", "task_id": active[0]["id"], "message": "Metadata enrichment is already in progress"}
+
+    mode_label = "Fast Mode (IGDB Only)" if fast_mode else "Full Mode (Steam + IGDB)"
+    task = task_manager.create_task("enrich_all", f"Enrich Metadata ({mode_label})")
+    background_tasks.add_task(background_rescan_all_task, task.id, fast_mode, force_update)
     
-    mode_str = "Fast Mode (IGDB Only)" if fast_mode else "Full Mode (Steam + IGDB)"
-    if not force_update:
-        mode_str += " [Skipping Existing]"
-        
     return {
-        "status": "queued", 
-        "message": f"Full catalog rescan started in background ({mode_str}). Check logs for progress."
+        "status": "queued",
+        "task_id": task.id,
+        "message": f"Catalog metadata enrichment started ({mode_label}). Stream logs via console."
     }
 
-async def background_rescan_all_task(fast_mode: bool = False, force_update: bool = False):
+async def background_rescan_all_task(task_id: str, fast_mode: bool = False, force_update: bool = False):
     """
-    Background task to enrich all games sequentially.
-    force_update: If False, skips games that already have an IGDB ID.
+    Background task to enrich all games sequentially with live streaming logs.
     """
-    logger.info(f"Background Rescan: Starting... (Fast Mode: {fast_mode}, Force: {force_update})")
-    import asyncio
     from app.core.db import engine
     from app.services.metadata import MetadataService
-    
-    delay = 0.25 if fast_mode else 2.0
-    
+    task = task_manager.get_task(task_id)
+    if not task:
+        return
+
+    mode_str = "Fast Mode (IGDB Only)" if fast_mode else "Full Mode (Steam + IGDB)"
+    task.log(f"Starting catalog-wide metadata enrichment: {mode_str}")
+    delay = 0.25 if fast_mode else 1.5
+
     with Session(engine) as session:
         games = session.exec(select(Game)).all()
-        service = MetadataService(session)
-        
-        success_count = 0
-        skipped_count = 0
-        
-        for i, game in enumerate(games):
-            try:
-                # Optimized Skip Logic
-                if not force_update and game.igdb_id:
-                    # If we aren't forcing an update, and we already have IGDB data, skip it.
-                    # This dramatically speeds up "filling in the blanks" rescans.
-                    skipped_count += 1
-                    continue
+        total_games = len(games)
+        if not games:
+            task.complete({"updated": 0, "skipped": 0, "total": 0}, "No games in catalog to enrich.")
+            return
 
-                logger.info(f"Background Rescan [{i+1}/{len(games)}]: Enriching {game.title}...")
-                await service.enrich_game(game, skip_steam=fast_mode)
-                success_count += 1
-                
-                # Rate limit protection
+        task.log(f"Found {total_games} games in catalog to process")
+        service = MetadataService(session)
+        updated = 0
+        skipped = 0
+        errors = 0
+
+        for i, game in enumerate(games):
+            if task.is_cancelled:
+                task.log("Enrichment cancelled by operator", level="warning")
+                break
+
+            task.set_progress(i, total_games, f"Enriching {game.title} ({i+1}/{total_games})")
+
+            if not force_update and game.igdb_id:
+                task.log(f"[{i+1}/{total_games}] Skipping '{game.title}' (already has IGDB data)")
+                skipped += 1
+                continue
+
+            task.log(f"[{i+1}/{total_games}] Enriching metadata for '{game.title}'...")
+            try:
+                updates = await service.enrich_game(game, skip_steam=fast_mode)
+                updated_keys = list(updates.keys())
+                if updated_keys:
+                    task.log(f"[{i+1}/{total_games}] Updated '{game.title}': {len(updated_keys)} fields ({', '.join(updated_keys)})", level="success")
+                    updated += 1
+                else:
+                    task.log(f"[{i+1}/{total_games}] No new metadata found for '{game.title}'", level="warning")
+                    skipped += 1
                 await asyncio.sleep(delay)
             except Exception as e:
-                logger.info(f"Background Rescan Error [{game.title}]: {e}")
-                
-        logger.info(f"Background Rescan: Complete. Updated {success_count} games. Skipped {skipped_count} (already existing).")
+                task.log(f"[{i+1}/{total_games}] Failed to enrich '{game.title}': {e}", level="error")
+                errors += 1
+
+    summary = f"Enrichment complete. Updated: {updated}, Skipped: {skipped}, Errors: {errors}."
+    task.complete({"updated": updated, "skipped": skipped, "errors": errors, "total": total_games}, summary)
 
 @router.delete("/games/bulk")
 async def bulk_delete_games(
@@ -467,10 +690,19 @@ async def bulk_delete_games(
     admin: User = Depends(require_admin)
 ):
     """Delete multiple games at once (admin only)."""
+    from app.models.review import Review
+    from app.models.social import UserPlaytime
+
     deleted_count = 0
     for game_id in game_ids:
         game = session.get(Game, game_id)
         if game:
+            reviews = session.exec(select(Review).where(Review.game_id == game_id)).all()
+            for r in reviews:
+                session.delete(r)
+            playtimes = session.exec(select(UserPlaytime).where(UserPlaytime.game_id == game_id)).all()
+            for p in playtimes:
+                session.delete(p)
             session.delete(game)
             deleted_count += 1
     
@@ -483,69 +715,93 @@ async def bulk_delete_games(
 
 @router.post("/scan-repository")
 async def scan_repository(
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     admin: User = Depends(require_admin)
 ):
     """
-    Scans the configured GAMES_REPO_PATH for folders (admin only).
-    Each folder is treated as a Game.
+    Scans the configured GAMES_REPO_PATH asynchronously.
+    Updates progress and logs lines in real-time via the Task Manager and SSE.
     """
+    active = [t for t in task_manager.get_active_tasks() if t["type"] == "scan_repo"]
+    if active:
+        return {"status": "already_running", "task_id": active[0]["id"], "message": "A repository scan is already running"}
+
+    task = task_manager.create_task("scan_repo", "Repository Scan")
+    background_tasks.add_task(run_scan_repo_task, task.id)
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "message": "Repository scan started in background. Stream logs via console."
+    }
+
+async def run_scan_repo_task(task_id: str):
+    from app.core.db import engine
+    from app.services.metadata import MetadataService
+    task = task_manager.get_task(task_id)
+    if not task:
+        return
+
+    task.log("Starting repository scan...")
     repo_path = settings.GAMES_REPO_PATH
+    task.log(f"Scanning directory: {repo_path}")
+
     if not os.path.exists(repo_path):
         try:
-            os.makedirs(repo_path)
-        except OSError:
-            return {"status": "error", "message": f"Repo path {repo_path} does not exist and could not be created."}
-            
-    added_count = 0
-    skipped_count = 0
-    errors = []
-    scanned_items = []
-    
-    items = os.listdir(repo_path)
-    logger.info(f"Repo Scan: Found {len(items)} items in {repo_path}: {items}")
+            os.makedirs(repo_path, exist_ok=True)
+            task.log(f"Created repository directory at: {repo_path}")
+        except Exception as e:
+            task.fail(f"Could not access or create repo path {repo_path}: {e}")
+            return
 
-    for item in items:
-        item_path = os.path.join(repo_path, item)
-        if os.path.isdir(item_path):
-            folder_name = item
-            scanned_items.append(folder_name)
+    try:
+        raw_items = os.listdir(repo_path)
+    except Exception as e:
+        task.fail(f"Failed to read directory {repo_path}: {e}")
+        return
+
+    items = [item for item in raw_items if os.path.isdir(os.path.join(repo_path, item))]
+    task.log(f"Found {len(items)} folder(s) in {repo_path}")
+
+    if not items:
+        task.complete({"added": 0, "skipped": 0, "total": 0}, "No game directories found in repository.")
+        return
+
+    added = 0
+    skipped = 0
+    errors = 0
+
+    with Session(engine) as session:
+        service = MetadataService(session)
+        for i, folder_name in enumerate(items):
+            if task.is_cancelled:
+                task.log("Scan cancelled by operator", level="warning")
+                break
+
+            task.set_progress(i, len(items), f"Processing {folder_name} ({i+1}/{len(items)})")
             
-            # Check DB
             existing = session.exec(select(Game).where(Game.title == folder_name)).first()
             if existing:
-                logger.info(f"Repo Scan: '{folder_name}' already in DB. Skipping.")
-                skipped_count += 1
+                task.log(f"[{i+1}/{len(items)}] '{folder_name}' already exists in catalog. Skipping.")
+                skipped += 1
                 continue
-                
-            # New Discovery
-            logger.info(f"Repo Scan: Discovered '{folder_name}'")
-            
+
+            task.log(f"[{i+1}/{len(items)}] Discovered new game: '{folder_name}'")
             new_game = Game(title=folder_name, source="manual")
             session.add(new_game)
-                
             try:
                 session.commit()
                 session.refresh(new_game)
-                
-                # Enrich with MetadataService
-                from app.services.metadata import MetadataService
-                service = MetadataService(session)
+                task.log(f"[{i+1}/{len(items)}] Fetching metadata for '{folder_name}'...")
                 await service.enrich_game(new_game)
-                
-                added_count += 1
+                task.log(f"[{i+1}/{len(items)}] Added and enriched: '{folder_name}'", level="success")
+                added += 1
             except Exception as e:
-                logger.info(f"Repo Scan Error [{folder_name}]: {e}")
-                errors.append(f"Failed to save {folder_name}: {e}")
-                
-    return {
-        "status": "success", 
-        "added": added_count,
-        "skipped": skipped_count, 
-        "scanned": scanned_items,
-        "errors": errors, 
-        "message": f"Scanned {repo_path}. Found {len(scanned_items)} folders. Added {added_count}. Skipped {skipped_count}."
-    }
+                task.log(f"[{i+1}/{len(items)}] Error saving {folder_name}: {e}", level="error")
+                errors += 1
+
+    summary = f"Repository scan finished. Added: {added}, Skipped: {skipped}, Errors: {errors}."
+    task.complete({"added": added, "skipped": skipped, "errors": errors, "total": len(items)}, summary)
 
 @router.delete("/clear-catalog")
 async def clear_catalog(
@@ -554,8 +810,19 @@ async def clear_catalog(
 ):
     """
     DANGER: Deletes ALL games from the database (admin only).
-    Does NOT delete files on disk, only the DB entries.
+    Safely cleans up reviews and playtimes first. Does NOT delete files on disk.
     """
+    from app.models.review import Review
+    from app.models.social import UserPlaytime
+
+    reviews = session.exec(select(Review)).all()
+    for r in reviews:
+        session.delete(r)
+        
+    playtimes = session.exec(select(UserPlaytime)).all()
+    for p in playtimes:
+        session.delete(p)
+
     statement = select(Game)
     games = session.exec(statement).all()
     count = len(games)
@@ -564,7 +831,7 @@ async def clear_catalog(
         session.delete(game)
         
     session.commit()
-    return {"status": "success", "message": f"Deleted {count} games from catalog."}
+    return {"status": "success", "message": f"Deleted {count} games, {len(reviews)} reviews, and {len(playtimes)} playtime records."}
 
 # ============================================================
 # Steam Integration (Admin Only)
@@ -673,19 +940,17 @@ class SteamLoginRequest(BaseModel):
 @router.post("/steam/login")
 async def test_steam_login(
     request: SteamLoginRequest,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     admin: User = Depends(require_admin)
 ):
     """
-    Test SteamCMD Login.
-    Useful for verifying credentials and handling Steam Guard / 2FA.
+    Test SteamCMD Login asynchronously with real-time log streaming.
     """
-    # Get configuration
     username = settings.STEAM_USERNAME
     password = settings.STEAM_PASSWORD
     steamcmd_path = settings.STEAMCMD_PATH
     
-    # Fall back to DB config
     if not username:
         username_config = session.get(SystemConfig, "steam_username")
         username = username_config.value if username_config else None
@@ -699,32 +964,83 @@ async def test_steam_login(
         if path_config and path_config.value:
             steamcmd_path = path_config.value
             
-    if not username or not password:
-        raise HTTPException(status_code=400, detail="Steam credentials missing")
+    has_token = _license_service.has_cached_token(username, steamcmd_path) if username else False
+
+    if not username or (not password and not has_token):
+        raise HTTPException(status_code=400, detail="Steam credentials missing. Please set username and password first.")
         
+    task = task_manager.create_task("steam_login", "Steam Login Test")
+    background_tasks.add_task(run_steam_login_task, task.id, steamcmd_path, username, password, request.steam_guard_code)
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "message": "Steam login test started. Stream logs via console."
+    }
+
+async def run_steam_login_task(task_id: str, steamcmd_path: str, username: str, password: Optional[str], auth_code: Optional[str]):
+    task = task_manager.get_task(task_id)
+    if not task:
+        return
+
+    is_windows = platform.system() == "Windows"
+    exe_name = "steamcmd.exe" if is_windows else "steamcmd.sh"
+    executable = os.path.join(steamcmd_path, exe_name)
+
+    if not os.path.exists(executable):
+        task.fail(f"SteamCMD not found at {executable}. Download it first from the Steam tab.")
+        return
+
+    task.log(f"Starting SteamCMD at {executable}...")
+
+    has_token = _license_service.has_cached_token(username, steamcmd_path)
+    if auth_code:
+        task.log(f"Logging in as user '{username}' with Steam Guard code (saving machine token)...")
+        login_args = ["+login", username, password or "", auth_code, "1"]
+    elif has_token:
+        task.log(f"Logging in as user '{username}' using saved machine token (password-free)...")
+        login_args = ["+login", username]
+    else:
+        task.log(f"Logging in as user: {username}")
+        login_args = ["+login", username, password, "1"] if password else ["+login", username]
+
+    cmd = [executable, *login_args, "+quit"]
+
     try:
-        # Run Login Only (empty commands list)
-        stdout, stderr, code = await _license_service.run_steamcmd(
-            steamcmd_path=steamcmd_path,
-            username=username,
-            password=password,
-            min_commands=[],
-            auth_code=request.steam_guard_code
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
-        
-        return {
-            "status": "success" if code == 0 else "error",
-            "exit_code": code,
-            "stdout": stdout,
-            "stderr": stderr,
-            "message": "Login Successful" if code == 0 else "Login Failed"
-        }
+
+        async def read_stream(stream, is_err=False):
+            while True:
+                line = await stream.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace").strip()
+                if text:
+                    masked = text.replace(password, "******") if password else text
+                    level = "error" if is_err else "info"
+                    if "Logged in OK" in masked or "Success" in masked:
+                        level = "success"
+                    elif "Steam Guard" in masked or "FAILED" in masked:
+                        level = "warning"
+                    task.log(masked, level=level)
+
+        await asyncio.gather(
+            read_stream(proc.stdout, is_err=False),
+            read_stream(proc.stderr, is_err=True)
+        )
+        rc = await proc.wait()
+
+        if rc == 0:
+            task.complete({"exit_code": 0}, "SteamCMD authenticated successfully!")
+        elif rc == 5:
+            task.complete({"exit_code": 5}, "Steam Guard code required. Enter code above and re-test.")
+        else:
+            task.fail(f"SteamCMD exited with code {rc}.")
     except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e),
-            "exit_code": -1
-        }
+        task.fail(f"SteamCMD execution failed: {e}")
 
 # ============================================================
 # SteamCMD Management (Admin Only)
@@ -741,58 +1057,83 @@ STEAMCMD_LINUX_URL = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_
 
 @router.post("/steamcmd/download")
 async def download_steamcmd(
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     admin: User = Depends(require_admin)
 ):
     """
-    Download and install SteamCMD to the configured path.
-    Detects OS and downloads appropriate version.
+    Download and install SteamCMD asynchronously with live log streaming.
     """
-    # Get configured path
+    active = [t for t in task_manager.get_active_tasks() if t["type"] == "steamcmd_download"]
+    if active:
+        return {"status": "already_running", "task_id": active[0]["id"], "message": "SteamCMD download is already running"}
+
     path_config = session.get(SystemConfig, "steamcmd_path")
     steamcmd_path = path_config.value if path_config else "./steamcmd"
-    
-    # Determine URL based on OS
+
+    task = task_manager.create_task("steamcmd_download", "Download SteamCMD")
+    background_tasks.add_task(run_steamcmd_download_task, task.id, steamcmd_path)
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "message": "SteamCMD download started in background. Stream logs via console."
+    }
+
+async def run_steamcmd_download_task(task_id: str, steamcmd_path: str):
+    from app.core.db import engine
+    task = task_manager.get_task(task_id)
+    if not task:
+        return
+
     is_windows = platform.system() == "Windows"
     url = STEAMCMD_WINDOWS_URL if is_windows else STEAMCMD_LINUX_URL
-    
+    os_name = "Windows" if is_windows else "Linux"
+
+    task.log(f"Preparing SteamCMD setup for {os_name}...")
+    task.log(f"Destination folder: {steamcmd_path}")
+    task.log(f"Downloading from {url}...")
+
     try:
-        # Create directory
         os.makedirs(steamcmd_path, exist_ok=True)
-        
-        # Download
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, follow_redirects=True)
-            response.raise_for_status()
-        
-        # Extract
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.get(url, follow_redirects=True)
+            resp.raise_for_status()
+
+        content = resp.content
+        mb_size = round(len(content) / (1024 * 1024), 2)
+        task.log(f"Downloaded {mb_size} MB archive. Extracting files...", level="info")
+
         if is_windows:
-            # ZIP file
-            with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+            with zipfile.ZipFile(io.BytesIO(content)) as zf:
                 zf.extractall(steamcmd_path)
         else:
-            # TAR.GZ file
-            with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as tf:
+            with tarfile.open(fileobj=io.BytesIO(content), mode="r:gz") as tf:
                 tf.extractall(steamcmd_path)
-        
-        # Update config
-        installed_config = session.get(SystemConfig, "steamcmd_installed")
-        if installed_config:
-            installed_config.value = "true"
-            session.add(installed_config)
-            session.commit()
-        
-        return {
-            "status": "success",
-            "message": f"SteamCMD downloaded to {steamcmd_path}",
-            "path": steamcmd_path
-        }
-        
+
+        exe_name = "steamcmd.exe" if is_windows else "steamcmd.sh"
+        exe_path = os.path.join(steamcmd_path, exe_name)
+        if not is_windows and os.path.exists(exe_path):
+            try:
+                os.chmod(exe_path, 0o755)
+            except Exception:
+                pass
+
+        if os.path.exists(exe_path):
+            task.log(f"Verified executable: {exe_path}", level="success")
+            with Session(engine) as session:
+                installed_cfg = session.get(SystemConfig, "steamcmd_installed")
+                if not installed_cfg:
+                    installed_cfg = SystemConfig(key="steamcmd_installed", value="true", value_type="bool", description="SteamCMD installation status")
+                    session.add(installed_cfg)
+                else:
+                    installed_cfg.value = "true"
+                    session.add(installed_cfg)
+                session.commit()
+            task.complete({"path": exe_path}, f"SteamCMD successfully installed to {steamcmd_path}")
+        else:
+            task.fail(f"Extraction completed but executable not found at {exe_path}")
     except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Failed to download SteamCMD: {str(e)}"
-        }
+        task.fail(f"SteamCMD download/extraction failed: {e}")
 
 @router.get("/steamcmd/status")
 async def get_steamcmd_status(
@@ -811,22 +1152,22 @@ async def get_steamcmd_status(
     exe_name = "steamcmd.exe" if is_windows else "steamcmd.sh"
     exe_path = os.path.join(steamcmd_path, exe_name)
     exe_exists = os.path.exists(exe_path)
-    
+
+    username = settings.STEAM_USERNAME or (session.get(SystemConfig, "steam_username").value if session.get(SystemConfig, "steam_username") else None)
+    has_token = _license_service.has_cached_token(username, steamcmd_path) if username else False
+
     return {
         "path": steamcmd_path,
         "is_installed": is_installed,
         "executable_exists": exe_exists,
-        "executable_path": exe_path if exe_exists else None
+        "executable_path": exe_path if exe_exists else None,
+        "has_cached_token": has_token,
+        "username": username
     }
 
 # ============================================================
 # Steam License Import Endpoints
 # ============================================================
-
-from app.services.steam_licenses import SteamLicenseService, search_steam_store
-
-# Global service instance for status tracking
-_license_service = SteamLicenseService()
 
 
 class ImportLicensesRequest(BaseModel):
@@ -837,102 +1178,100 @@ class ImportLicensesRequest(BaseModel):
 
 @router.post("/steam/import-licenses")
 async def import_steam_licenses(
+    background_tasks: BackgroundTasks,
     request: Optional[ImportLicensesRequest] = None,
     session: Session = Depends(get_session),
     admin: User = Depends(require_admin)
 ):
     """
-    Import all owned paid games from Steam account.
-    Uses SteamCMD licenses_print to get owned games,
-    fetches metadata, and filters out free games.
-    
-    If Steam Guard code is required (exit code 5),
-    provide 'steam_guard_code' in the request body.
+    Import all owned paid games from Steam account asynchronously.
+    Updates progress and streams logs in real-time.
     """
-    # Check env vars first, then fall back to DB config
-    username = settings.STEAM_USERNAME
-    password = settings.STEAM_PASSWORD
+    active = [t for t in task_manager.get_active_tasks() if t["type"] == "import_licenses"]
+    if active:
+        return {"status": "already_running", "task_id": active[0]["id"], "message": "License import is already running"}
+
+    username = settings.STEAM_USERNAME or (session.get(SystemConfig, "steam_username").value if session.get(SystemConfig, "steam_username") else None)
+    password = settings.STEAM_PASSWORD or (session.get(SystemConfig, "steam_password").value if session.get(SystemConfig, "steam_password") else None)
     steamcmd_path = settings.STEAMCMD_PATH
-    
-    # Fall back to DB config if env vars not set
-    if not username:
-        username_config = session.get(SystemConfig, "steam_username")
-        username = username_config.value if username_config else None
-    
-    if not password:
-        password_config = session.get(SystemConfig, "steam_password")
-        password = password_config.value if password_config else None
-    
     if steamcmd_path == "./steamcmd":
-        path_config = session.get(SystemConfig, "steamcmd_path")
-        if path_config and path_config.value:
-            steamcmd_path = path_config.value
-    
+        cfg = session.get(SystemConfig, "steamcmd_path")
+        if cfg and cfg.value:
+            steamcmd_path = cfg.value
+
+    has_token = _license_service.has_cached_token(username, steamcmd_path) if username else False
+
     if not username:
-        raise HTTPException(
-            status_code=400,
-            detail="Steam username not configured. Set STEAM_USERNAME env var or configure in Steam tab."
-        )
-    
-    if not password:
-        raise HTTPException(
-            status_code=400,
-            detail="Steam password not configured. Set STEAM_PASSWORD env var or configure in Steam tab."
-        )
-    
-    # Check if SteamCMD executable exists
+        raise HTTPException(status_code=400, detail="Steam username not configured. Configure in Steam tab.")
+    if not password and not has_token:
+        raise HTTPException(status_code=400, detail="Steam password not configured. Configure in Steam tab.")
+
     is_windows = platform.system() == "Windows"
     exe_name = "steamcmd.exe" if is_windows else "steamcmd.sh"
     exe_path = os.path.join(steamcmd_path, exe_name)
-    
     if not os.path.exists(exe_path):
-        raise HTTPException(
-            status_code=400,
-            detail=f"SteamCMD not found at {exe_path}. Download it first from the Steam tab."
-        )
-    
-    # Import settings
+        raise HTTPException(status_code=400, detail=f"SteamCMD not found at {exe_path}. Download it first from the Steam tab.")
+
     batch_size = request.batch_size if request else 10
     delay_seconds = request.delay_seconds if request else 2.0
     auth_code = request.steam_guard_code if request else None
-    
-    try:
-        # Pass directory path, not executable - the service builds the full path
-        result = await _license_service.import_all_licenses(
-            session=session,
-            steamcmd_path=steamcmd_path,  # Directory, not exe
-            username=username,
-            password=password,
-            batch_size=batch_size,
-            delay_seconds=delay_seconds,
-            auth_code=auth_code
-        )
-        
-        return {
-            "status": "success",
-            "total_found": result.total_found,
-            "imported": result.imported,
-            "skipped_existing": result.skipped_existing,
-            "skipped_free": result.skipped_free,
-            "skipped_invalid": result.skipped_invalid,
-            "skipped_demo": result.skipped_demo,
-            "skipped_online_only": result.skipped_online_only,
-            "errors": result.errors[:10],
-            "games_added": result.games_added[:20],
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Import failed: {str(e)}"
-        )
 
+    task = task_manager.create_task("import_licenses", "Steam License Import")
+    background_tasks.add_task(run_import_licenses_task, task.id, steamcmd_path, username, password, batch_size, delay_seconds, auth_code)
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "message": "Steam license import started in background. Stream logs via console."
+    }
+
+async def run_import_licenses_task(task_id: str, steamcmd_path: str, username: str, password: Optional[str], batch_size: int, delay_seconds: float, auth_code: Optional[str]):
+    from app.core.db import engine
+    task = task_manager.get_task(task_id)
+    if not task:
+        return
+
+    task.log("Starting Steam license import process...")
+    task.log(f"Fetching license package list for account '{username}' via SteamCMD...")
+
+    with Session(engine) as session:
+        try:
+            result = await _license_service.import_all_licenses(
+                session=session,
+                steamcmd_path=steamcmd_path,
+                username=username,
+                password=password,
+                batch_size=batch_size,
+                delay_seconds=delay_seconds,
+                auth_code=auth_code,
+                task=task
+            )
+            if result.errors:
+                for err in result.errors[:10]:
+                    task.log(f"Warning: {err}", level="warning")
+            summary = f"Import complete. Imported: {result.imported} new games."
+            task.complete({
+                "total_found": result.total_found,
+                "imported": result.imported,
+                "skipped_existing": result.skipped_existing,
+                "skipped_free": result.skipped_free,
+                "skipped_invalid": result.skipped_invalid,
+                "skipped_demo": result.skipped_demo,
+                "skipped_online_only": result.skipped_online_only,
+                "errors": result.errors[:10],
+                "games_added": result.games_added[:20]
+            }, summary)
+        except Exception as e:
+            logger.error(f"License import task failed: {e}", exc_info=True)
+            task.fail(f"License import failed: {e}")
 
 @router.get("/steam/import-licenses/status")
 async def get_import_status(
     admin: User = Depends(require_admin)
 ):
     """Get the status of an ongoing license import."""
+    active = [t for t in task_manager.get_active_tasks() if t["type"] == "import_licenses"]
+    if active:
+        return {"running": True, "phase": active[0]["progress"]["message"], "progress": active[0]["progress"]["current"], "total": active[0]["progress"]["total"]}
     return _license_service.get_import_status()
 
 

@@ -1,6 +1,9 @@
 from typing import Optional
 from sqlmodel import Field, SQLModel
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 class ReviewBase(SQLModel):
     content: str
@@ -16,7 +19,7 @@ class Review(ReviewBase, table=True):
     game_id: int = Field(foreign_key="game.id")
     playtime_at_review: Optional[int] = None  # minutes
     is_hidden: bool = Field(default=False)
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=utc_now)
     updated_at: Optional[datetime] = None
 
 class ReviewCreate(SQLModel):

@@ -46,15 +46,15 @@ async def check_setup_status(session: Session = Depends(get_session)):
     Returns setup status so frontend can show setup wizard if needed.
     Also indicates which fields are pre-configured via environment variables.
     """
-    # Check setup_complete flag
-    config = session.get(SystemConfig, "setup_complete")
-    setup_complete = config.value.lower() == "true" if config else False
-    
     # Check if any admin user exists
     admin_count = session.exec(
         select(User).where(User.is_admin == True)
     ).first()
     has_admin = admin_count is not None
+
+    # Check setup_complete flag - ONLY True if an admin user actually exists
+    config = session.get(SystemConfig, "setup_complete")
+    setup_complete = (config.value.lower() == "true" if config else False) and has_admin
     
     # Check what's already configured via env vars
     steam_username_configured = bool(settings.STEAM_USERNAME)
@@ -78,33 +78,43 @@ async def complete_setup(
     Complete the initial setup.
     Creates admin account and stores Steam credentials (if not already in env).
     """
-    # Check if setup already complete
+    admin = session.exec(select(User).where(User.is_admin == True)).first()
     config = session.get(SystemConfig, "setup_complete")
-    if config and config.value.lower() == "true":
+    if config and config.value.lower() == "true" and admin:
         raise HTTPException(
             status_code=400,
             detail="Setup has already been completed"
         )
     
-    # Check if username already exists
+    # Check if user already exists
     existing_user = session.exec(
         select(User).where(User.username == data.username)
     ).first()
     if existing_user:
-        raise HTTPException(
-            status_code=400,
-            detail="Username already exists"
+        if admin and existing_user.id != admin.id:
+            raise HTTPException(
+                status_code=400,
+                detail="Username already exists"
+            )
+        # Promote existing user to admin with new password
+        existing_user.password_hash = hash_password(data.password)
+        existing_user.is_admin = True
+        existing_user.is_active = True
+        if data.email:
+            existing_user.email = data.email
+        session.add(existing_user)
+        admin_user = existing_user
+    else:
+        # Create admin user
+        admin_user = User(
+            username=data.username,
+            password_hash=hash_password(data.password),
+            email=data.email,
+            display_name="Administrator",
+            is_admin=True,
+            is_active=True
         )
-    
-    # Create admin user
-    admin_user = User(
-        username=data.username,
-        password_hash=hash_password(data.password),
-        email=data.email,
-        is_admin=True,
-        is_active=True
-    )
-    session.add(admin_user)
+        session.add(admin_user)
     
     # Store Steam API key if provided AND not already in env
     if data.steam_api_key and not settings.STEAM_WEB_API_KEY:
@@ -190,3 +200,17 @@ async def reset_setup(
         session.commit()
     
     return {"status": "reset", "message": "Setup status reset to false"}
+
+@router.post("/auto-init")
+async def trigger_auto_init(session: Session = Depends(get_session)):
+    """
+    Trigger automatic initialization from environment variables or defaults.
+    Ensures default admin user exists and is active.
+    """
+    from app.core.db import init_db
+    init_db()
+    return {
+        "status": "success",
+        "message": f"Auto-initialization complete. Admin user '{settings.ADMIN_USERNAME}' is configured.",
+        "admin_username": settings.ADMIN_USERNAME
+    }

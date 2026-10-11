@@ -1,4 +1,4 @@
-import { LayoutGrid, Download, Server, Settings, MessageSquare, Newspaper, Gamepad2, LogOut, User } from "lucide-react";
+import { LayoutGrid, Download, Settings, MessageSquare, Newspaper, Gamepad2, LogOut, User } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,7 +8,6 @@ const NAV_ITEMS = [
     { icon: Gamepad2, label: "Store", path: "/store" },
     { icon: Download, label: "Downloads", path: "/downloads" },
     { icon: MessageSquare, label: "Community", path: "/community" },
-    { icon: Server, label: "Servers", path: "/servers" },
     { icon: Newspaper, label: "News", path: "/news" },
 ];
 
