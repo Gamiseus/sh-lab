@@ -7,7 +7,7 @@ from typing import List, Optional, Any, Dict
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from starlette.responses import StreamingResponse
-from sqlmodel import Session, select, or_
+from sqlmodel import Session, select, or_, func
 from pydantic import BaseModel
 from app.core.db import get_session
 from app.core.config import settings
@@ -16,10 +16,13 @@ from app.core.security import hash_password
 from app.models.game import Game
 from app.models.user import User, UserRead, UserCreate
 from app.models.config import SystemConfig
+from app.models.library import ServerGameCache, UserLibrary
 from app.services.igdb import IGDBClient
 from app.services.metadata import MetadataService
 from app.services.task_manager import task_manager
 from app.services.steam_licenses import SteamLicenseService, search_steam_store
+from app.services.depot_downloader import depot_downloader, run_depot_download_task
+from app.services.cache_cleaner import cache_cleaner, _safe_purge_disk_repository
 
 logger = logging.getLogger(__name__)
 
@@ -1412,5 +1415,277 @@ async def delete_review_admin(
     session.commit()
     
     return {"message": "Review deleted successfully"}
+
+
+# ============================================================
+# Server Storage & Install Administration (R6.1 - R6.4, R6.7)
+# ============================================================
+
+class StorageStatusResponse(BaseModel):
+    total_bytes: int
+    used_bytes: int
+    cached_games_count: int
+    orphaned_games_count: int
+    free_bytes: Optional[int] = None
+    utilization_pct: Optional[float] = None
+    total_storage: Optional[int] = None
+    used_storage: Optional[int] = None
+    cached_count: Optional[int] = None
+    orphaned_count: Optional[int] = None
+
+
+class StorageGameRead(BaseModel):
+    id: int
+    game_id: int
+    title: str
+    steam_app_id: Optional[int] = None
+    user_count: int = 0
+    cached_size_bytes: int = 0
+    build_id: Optional[str] = None
+    latest_build_id: Optional[str] = None
+    last_check: Optional[datetime] = None
+    is_cached: bool = False
+    orphaned_at: Optional[datetime] = None
+    purged_at: Optional[datetime] = None
+    cached_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class StorageUpdateResponse(BaseModel):
+    status: str = "queued"
+    message: str
+    game_id: int
+    task_id: Optional[str] = None
+
+
+class StoragePurgeResponse(BaseModel):
+    status: str = "purged"
+    message: str
+    game_id: int
+    freed_bytes: int = 0
+    purged_at: Optional[datetime] = None
+
+
+@router.get("/storage/status", response_model=StorageStatusResponse)
+async def get_storage_status(
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin)
+):
+    """
+    R6.1: Get server storage footprint metrics.
+    Returns total storage bytes, used bytes, cached game count, and orphaned game count.
+    Guarantees non-negative metrics and safe 0-count calculations.
+    """
+    import shutil
+    repo_path = os.path.abspath(settings.GAMES_REPO_PATH)
+    try:
+        os.makedirs(repo_path, exist_ok=True)
+        total_disk, _, _ = shutil.disk_usage(repo_path)
+    except Exception:
+        total_disk = 100 * 1024 * 1024 * 1024
+
+    cached_entries = session.exec(
+        select(ServerGameCache).where(ServerGameCache.is_cached == True)
+    ).all()
+
+    used_bytes = sum(max(0, entry.cached_size_bytes) for entry in cached_entries)
+    cached_count = len(cached_entries)
+    orphaned_count = sum(1 for entry in cached_entries if entry.orphaned_at is not None)
+
+    free_bytes = max(0, total_disk - used_bytes)
+    utilization_pct = round((used_bytes / total_disk) * 100.0, 2) if total_disk > 0 else 0.0
+
+    return StorageStatusResponse(
+        total_bytes=max(0, total_disk),
+        used_bytes=max(0, used_bytes),
+        cached_games_count=max(0, cached_count),
+        orphaned_games_count=max(0, orphaned_count),
+        total_storage=max(0, total_disk),
+        used_storage=max(0, used_bytes),
+        cached_count=max(0, cached_count),
+        orphaned_count=max(0, orphaned_count),
+        free_bytes=free_bytes,
+        utilization_pct=utilization_pct,
+    )
+
+
+@router.get("/storage/games", response_model=List[StorageGameRead])
+async def list_storage_games(
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin)
+):
+    """
+    R6.2: Get catalog of tracked games with associated user counts,
+    cached storage size, build IDs, and cache statuses.
+    """
+    games = session.exec(select(Game).order_by(Game.title)).all()
+    cache_entries = session.exec(select(ServerGameCache)).all()
+    cache_map = {entry.game_id: entry for entry in cache_entries}
+
+    user_counts_query = (
+        select(UserLibrary.game_id, func.count(func.distinct(UserLibrary.user_id)))
+        .group_by(UserLibrary.game_id)
+    )
+    user_counts_map = dict(session.exec(user_counts_query).all())
+
+    seen_game_ids = set()
+    results: List[StorageGameRead] = []
+
+    for game in games:
+        seen_game_ids.add(game.id)
+        cache = cache_map.get(game.id)
+        u_count = user_counts_map.get(game.id, 0)
+
+        results.append(StorageGameRead(
+            id=game.id,
+            game_id=game.id,
+            title=game.title,
+            steam_app_id=game.steam_app_id,
+            user_count=u_count,
+            cached_size_bytes=cache.cached_size_bytes if cache else 0,
+            build_id=cache.build_id if cache else None,
+            latest_build_id=cache.latest_build_id if cache else None,
+            last_check=cache.last_check if cache else None,
+            is_cached=cache.is_cached if cache else False,
+            orphaned_at=cache.orphaned_at if cache else None,
+            purged_at=cache.purged_at if cache else None,
+            cached_at=cache.cached_at if cache else None,
+            updated_at=cache.updated_at if cache else None,
+        ))
+
+    for cache in cache_entries:
+        if cache.game_id not in seen_game_ids:
+            seen_game_ids.add(cache.game_id)
+            u_count = user_counts_map.get(cache.game_id, 0)
+            results.append(StorageGameRead(
+                id=cache.game_id,
+                game_id=cache.game_id,
+                title=cache.title,
+                steam_app_id=cache.steam_app_id,
+                user_count=u_count,
+                cached_size_bytes=cache.cached_size_bytes,
+                build_id=cache.build_id,
+                latest_build_id=cache.latest_build_id,
+                last_check=cache.last_check,
+                is_cached=cache.is_cached,
+                orphaned_at=cache.orphaned_at,
+                purged_at=cache.purged_at,
+                cached_at=cache.cached_at,
+                updated_at=cache.updated_at,
+            ))
+
+    return results
+
+
+@router.post("/storage/{game_id}/update", response_model=StorageUpdateResponse, status_code=200)
+async def force_update_storage_game(
+    game_id: int,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin)
+):
+    """
+    R6.3: Force SteamCMD update / re-validation for a specific game.
+    Dispatches background depot download task with validate flag.
+    Returns HTTP 200/202 with task ID or 404 if game nonexistent.
+    """
+    game = session.get(Game, game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail=f"Game with ID {game_id} not found")
+
+    now = datetime.now(timezone.utc)
+    cache_entry = session.exec(
+        select(ServerGameCache).where(ServerGameCache.game_id == game_id)
+    ).first()
+    if not cache_entry:
+        cache_entry = ServerGameCache(
+            game_id=game.id,
+            title=game.title,
+            steam_app_id=game.steam_app_id,
+            last_check=now,
+            updated_at=now
+        )
+        session.add(cache_entry)
+    else:
+        cache_entry.last_check = now
+        cache_entry.updated_at = now
+        session.add(cache_entry)
+    session.commit()
+
+    task = depot_downloader.start_download(
+        game_id=game.id,
+        game_title=game.title,
+        steam_app_id=game.steam_app_id
+    )
+    background_tasks.add_task(run_depot_download_task, task.id, game.id)
+
+    return StorageUpdateResponse(
+        status="queued",
+        message=f"SteamCMD update/re-validation initiated for '{game.title}'",
+        game_id=game.id,
+        task_id=task.id
+    )
+
+
+@router.post("/storage/{game_id}/purge", response_model=StoragePurgeResponse, status_code=200)
+async def purge_storage_game(
+    game_id: int,
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin)
+):
+    """
+    R6.4: Manually purge cached files on server disk and reset ServerGameCache record.
+    Overrides the 7-day orphan retention countdown for immediate reclamation.
+    """
+    purge_info = cache_cleaner.purge_game_cache(game_id, session=session)
+
+    if purge_info:
+        return StoragePurgeResponse(
+            status="purged",
+            message=f"Purged cached files for '{purge_info['title']}'",
+            game_id=game_id,
+            freed_bytes=purge_info.get("freed_bytes", 0),
+            purged_at=purge_info.get("purged_at")
+        )
+
+    game = session.get(Game, game_id)
+    if not game:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Game with ID {game_id} not found"
+        )
+
+    freed_bytes = _safe_purge_disk_repository(game.title)
+    now = datetime.now(timezone.utc)
+
+    cache_entry = session.exec(
+        select(ServerGameCache).where(ServerGameCache.game_id == game.id)
+    ).first()
+    if not cache_entry:
+        cache_entry = ServerGameCache(
+            game_id=game.id,
+            title=game.title,
+            steam_app_id=game.steam_app_id,
+            is_cached=False,
+            cached_size_bytes=0,
+            purged_at=now,
+            updated_at=now
+        )
+    else:
+        cache_entry.is_cached = False
+        cache_entry.cached_size_bytes = 0
+        cache_entry.purged_at = now
+        cache_entry.updated_at = now
+    session.add(cache_entry)
+    session.commit()
+
+    return StoragePurgeResponse(
+        status="purged",
+        message=f"Game '{game.title}' is not cached on server",
+        game_id=game.id,
+        freed_bytes=freed_bytes,
+        purged_at=now
+    )
+
 
 

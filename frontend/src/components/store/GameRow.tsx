@@ -9,6 +9,7 @@ interface GameRowProps {
     icon?: React.ReactNode;
     games: Game[];
     seeAllLink?: string;
+    onTitleClick?: () => void;
     cardSize?: "sm" | "md" | "lg";
     showPrice?: boolean;
     headerExtra?: React.ReactNode;
@@ -19,6 +20,7 @@ export function GameRow({
     icon,
     games,
     seeAllLink,
+    onTitleClick,
     cardSize = "md",
     showPrice = false,
     headerExtra
@@ -58,21 +60,34 @@ export function GameRow({
         <section className="relative group/section">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 px-1 gap-2">
-                <div className="flex items-center gap-3">
+                <div
+                    className={`flex items-center gap-3 ${onTitleClick ? "cursor-pointer group/title select-none" : ""}`}
+                    onClick={onTitleClick}
+                >
                     {icon && <span className="text-xl">{icon}</span>}
-                    <h2 className="text-xl font-bold text-white">{title}</h2>
+                    <h2 className={`text-xl font-bold text-white ${onTitleClick ? "group-hover/title:text-violet-400 transition-colors" : ""}`}>
+                        {title}
+                    </h2>
                     <span className="text-sm text-zinc-500">({games.length})</span>
                 </div>
                 <div className="flex items-center gap-3">
                     {headerExtra}
-                    {seeAllLink && (
+                    {seeAllLink ? (
                         <Link
                             to={seeAllLink}
                             className="text-sm text-violet-400 hover:text-violet-300 transition-colors"
                         >
                             See All →
                         </Link>
-                    )}
+                    ) : onTitleClick ? (
+                        <button
+                            type="button"
+                            onClick={onTitleClick}
+                            className="text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                        >
+                            See All →
+                        </button>
+                    ) : null}
                 </div>
             </div>
 
@@ -102,7 +117,7 @@ export function GameRow({
                     style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
                 >
                     {games.map((game) => (
-                        <div key={game.id} className="flex-shrink-0">
+                        <div key={game.id} className="flex-shrink-0 w-60 sm:w-64">
                             <GameCard game={game} size={cardSize} showPrice={showPrice} />
                         </div>
                     ))}

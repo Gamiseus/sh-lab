@@ -36,6 +36,10 @@ from app.models.social import (
     FriendshipRead, FriendRead
 )
 
+from app.models.library import (
+    UserLibrary, UserLibraryEntry, ServerGameCache
+)
+
 __all__ = [
     # Game
     "Game", "GameBase", "GameCreate", "GameUpdate", "GameRead",
@@ -58,4 +62,6 @@ __all__ = [
     "UserPlaytime", "UserPlaytimeRead", "UserPlaytimeUpdate",
     "Friendship", "FriendshipCreate", "FriendshipUpdate",
     "FriendshipRead", "FriendRead",
+    # Library & Cache
+    "UserLibrary", "UserLibraryEntry", "ServerGameCache",
 ]

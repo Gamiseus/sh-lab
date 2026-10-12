@@ -12,6 +12,8 @@ import { ProfilePage } from "@/pages/ProfilePage";
 import { CommunityPage } from "@/pages/CommunityPage";
 import { NewsPage } from "@/pages/NewsPage";
 import { NewsDetailsPage } from "@/pages/NewsDetailsPage";
+import { DownloadsPage } from "@/pages/DownloadsPage";
+import { AdminPage } from "@/pages/AdminPage";
 import "./App.css";
 
 const queryClient = new QueryClient();
@@ -41,12 +43,8 @@ function App() {
               <Route path="/community" element={<CommunityPage />} />
               <Route path="/news" element={<NewsPage />} />
               <Route path="/news/:id" element={<NewsDetailsPage />} />
-              <Route path="/downloads" element={
-                <div className="p-8 text-center">
-                  <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Downloads</h1>
-                  <p style={{ color: '#888' }}>The download manager is under development and will be available in a future update.</p>
-                </div>
-              } />
+              <Route path="/downloads" element={<DownloadsPage />} />
+              <Route path="/admin" element={<AdminPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

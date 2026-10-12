@@ -6,8 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>sh_lab Admin</title>
     <style>
+        html, :root {
+            color-scheme: dark;
+            accent-color: #7c3aed;
+        }
+
         * {
             box-sizing: border-box;
+            scrollbar-color: #3f3f46 transparent;
+            scrollbar-width: thin;
+        }
+
+        ::selection {
+            background-color: rgba(124, 58, 237, 0.45);
+            color: #ffffff;
         }
 
         body {
@@ -16,12 +28,40 @@
             color: #e4e4e7;
             margin: 0;
             padding: 0;
+            -webkit-font-smoothing: antialiased;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 40px 20px;
+        }
+
+        h1, h2, h3, h4 {
+            text-wrap: balance;
+        }
+
+        p {
+            text-wrap: pretty;
+        }
+
+        *:focus-visible {
+            outline: 2px solid #7c3aed;
+            outline-offset: 2px;
+        }
+
+        input:user-invalid,
+        textarea:user-invalid,
+        select:user-invalid {
+            border-color: #ef4444 !important;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
         }
 
         h1 {

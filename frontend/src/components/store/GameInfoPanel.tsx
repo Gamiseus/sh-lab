@@ -2,6 +2,8 @@ import { Game, formatPrice, formatPlaytime } from "@/lib/api";
 import {
     Download,
     Play,
+    PlusCircle,
+    CheckCircle,
     Calendar,
     Building2,
     Users,
@@ -16,11 +18,20 @@ import { Link } from "react-router-dom";
 interface GameInfoPanelProps {
     game: Game;
     isInstalled?: boolean;
+    isInLibrary?: boolean;
     onInstall?: () => void;
     onLaunch?: () => void;
+    onAddToLibrary?: () => void;
 }
 
-export function GameInfoPanel({ game, isInstalled = false, onInstall, onLaunch }: GameInfoPanelProps) {
+export function GameInfoPanel({
+    game,
+    isInstalled = false,
+    isInLibrary = false,
+    onInstall,
+    onLaunch,
+    onAddToLibrary
+}: GameInfoPanelProps) {
     return (
         <div className="bg-zinc-900/50 border border-white/10 rounded-xl overflow-hidden">
             {/* Main CTA */}
@@ -71,20 +82,48 @@ export function GameInfoPanel({ game, isInstalled = false, onInstall, onLaunch }
                             Play
                         </button>
                     ) : (
-                        <button
-                            onClick={onInstall}
-                            className="
-                w-full py-4 rounded-xl font-bold text-lg
-                bg-gradient-to-r from-violet-600 to-indigo-600
-                hover:from-violet-500 hover:to-indigo-500
-                text-white shadow-lg shadow-violet-500/20
-                flex items-center justify-center gap-3
-                transition-all duration-300 hover:scale-[1.02]
-              "
-                        >
-                            <Download className="w-5 h-5" />
-                            Install
-                        </button>
+                        <div className="space-y-2.5">
+                            {/* Primary Install Button */}
+                            <button
+                                onClick={onInstall}
+                                className="
+                    w-full py-4 rounded-xl font-bold text-lg
+                    bg-gradient-to-r from-violet-600 to-indigo-600
+                    hover:from-violet-500 hover:to-indigo-500
+                    text-white shadow-lg shadow-violet-500/20
+                    flex items-center justify-center gap-3
+                    transition-all duration-300 hover:scale-[1.02]
+                  "
+                            >
+                                <Download className="w-5 h-5" />
+                                Install
+                            </button>
+
+                            {/* Secondary Add to Library Button or Owned Indicator */}
+                            {!isInLibrary ? (
+                                <button
+                                    onClick={onAddToLibrary}
+                                    type="button"
+                                    className="
+                    w-full py-3 rounded-xl font-semibold text-sm
+                    bg-zinc-800/90 hover:bg-zinc-700
+                    text-zinc-200 hover:text-white
+                    border border-white/10
+                    flex items-center justify-center gap-2
+                    transition-all duration-200 hover:scale-[1.01]
+                  "
+                                    title="Add to your library without downloading files"
+                                >
+                                    <PlusCircle className="w-4 h-4 text-violet-400" />
+                                    <span>Add to Library</span>
+                                </button>
+                            ) : (
+                                <div className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                                    <span>In Library (Not Installed)</span>
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

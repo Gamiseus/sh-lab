@@ -30,6 +30,7 @@ def list_catalog(
     categories_bracket: Optional[List[str]] = Query(None, alias="category[]"),
     source: Optional[str] = None,
     platform: Optional[str] = None,
+    has_discount: Optional[bool] = None,
     sort_by: str = "title",
     sort_order: str = "asc",
     order: Optional[str] = Query(None, description="Alias for sort_order"),
@@ -44,6 +45,7 @@ def list_catalog(
     - category: Filter by Steam category (supports multiple, AND logic)
     - source: Filter by source ("steam", "manual", "torrent")
     - platform: Filter by platform ("windows", "mac", "linux")
+    - has_discount: Filter for games with active discount percentages
     
     Sort options: title, rating, metacritic_score, created_at, release_date, steam_review_count
     """
@@ -91,19 +93,59 @@ def list_catalog(
         query = query.where(
             func.jsonb_extract_path_text(Game.platforms, platform) == "true"
         )
+
+    # Discount filter
+    if has_discount:
+        query = query.where(
+            Game.discount_percent.isnot(None),
+            Game.discount_percent > 0
+        )
     
     # Sorting
     effective_order = (order or sort_order or "asc").lower()
-    sort_column = getattr(Game, sort_by, Game.title)
-    if effective_order == "desc":
-        query = query.order_by(sort_column.desc().nullslast())
+    if sort_by in ("steam_score", "steam_reviews", "steam"):
+        query = query.order_by(Game.steam_review_percent.desc().nullslast(), Game.steam_review_count.desc().nullslast())
+    elif sort_by in ("rating", "top_rated"):
+        query = query.order_by(Game.steam_review_percent.desc().nullslast(), Game.rating.desc().nullslast(), Game.metacritic_score.desc().nullslast())
+    elif sort_by in ("popularity", "popular"):
+        query = query.order_by(Game.steam_review_count.desc().nullslast(), Game.rating.desc().nullslast())
+    elif sort_by in ("recent", "recently_added"):
+        query = query.order_by(Game.created_at.desc())
+    elif sort_by in ("trending",):
+        query = query.order_by(Game.metacritic_score.desc().nullslast(), Game.created_at.desc())
+    elif sort_by in ("metacritic", "metacritic_score"):
+        query = query.order_by(Game.metacritic_score.desc().nullslast())
+    elif sort_by in ("igdb", "igdb_score"):
+        query = query.order_by(Game.rating.desc().nullslast())
     else:
-        query = query.order_by(sort_column.asc().nullsfirst())
-    
+        sort_column = getattr(Game, sort_by, Game.title)
+        if effective_order == "desc":
+            query = query.order_by(sort_column.desc().nullslast())
+        else:
+            query = query.order_by(sort_column.asc().nullsfirst())
+
     query = query.offset(offset).limit(limit)
     games = session.exec(query).all()
     return games
 
+
+@router.get("/deals", response_model=List[GameRead])
+def get_discounted_games(
+    limit: int = Query(50, ge=0),
+    offset: int = 0,
+    session: Session = Depends(get_session)
+):
+    """
+    Get all games currently on sale with active discount percentages.
+    """
+    query = select(Game).where(
+        Game.discount_percent.isnot(None),
+        Game.discount_percent > 0
+    ).order_by(
+        Game.discount_percent.desc(),
+        Game.metacritic_score.desc().nullslast()
+    ).offset(offset).limit(limit)
+    return session.exec(query).all()
 
 
 @router.get("/featured", response_model=List[GameRead])

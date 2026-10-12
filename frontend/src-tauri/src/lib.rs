@@ -48,6 +48,23 @@ async fn uninstall_game_command(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn verify_local_game_command(
+    library_paths: Vec<String>,
+    game_id: i32,
+    game_title: String,
+    steam_app_id: Option<i32>,
+    expected_exe: Option<String>,
+) -> library_scanner::LocalVerificationResult {
+    library_scanner::verify_game_on_disk(
+        library_paths,
+        game_id,
+        game_title,
+        steam_app_id,
+        expected_exe,
+    ).await
+}
+
+#[tauri::command]
 async fn reset_metadata_command(path: String) -> Result<(), String> {
     library_scanner::reset_metadata(path).await
 }
@@ -138,6 +155,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_folder,
             scan_library_path,
+            verify_local_game_command,
             uninstall_game_command,
             reset_metadata_command,
             // Install commands

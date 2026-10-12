@@ -1,13 +1,14 @@
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { ArrowLeft, ExternalLink, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { storeAPI, getImageUrl, playtimeAPI } from "@/lib/api";
 import { MediaGallery } from "@/components/store/MediaGallery";
 import { GameInfoPanel } from "@/components/store/GameInfoPanel";
 import { ReviewList } from "@/components/reviews/ReviewList";
+import { useLibraryStore, LocalVerificationResult } from "@/stores/LibraryStore";
 
 type Tab = "about" | "requirements" | "achievements" | "reviews";
 
@@ -40,6 +41,7 @@ type GameState = "not_installed" | "installing" | "installed" | "playing";
 export function GameDetailsPage() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState<Tab>("about");
     const [gameState, setGameState] = useState<GameState>("not_installed");
     const [installProgress, setInstallProgress] = useState<InstallProgress | null>(null);
@@ -47,20 +49,36 @@ export function GameDetailsPage() {
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [revealedAchievements, setRevealedAchievements] = useState<Set<string>>(new Set());
 
+    const { isInLibrary, isInstalled, addToLibrary, addInstalledGame } = useLibraryStore();
+
     const { data: game, isLoading, error: fetchError } = useQuery({
         queryKey: ["game", id],
         queryFn: () => storeAPI.getGame(Number(id)),
         enabled: !!id,
     });
 
-    // Get library path from settings
-    const getLibraryPath = (): string => {
+    const gameInLibrary = game ? isInLibrary(game.id) : false;
+    const gameIsInstalled = game ? isInstalled(game.id) : false;
+
+    // Standardized library paths reading with fallback (R3 requirement)
+    const getConfiguredLibraryPaths = (): string[] => {
         try {
-            const paths = JSON.parse(localStorage.getItem("library-paths") || "[]");
-            return paths[0] || "E:\\Games";
-        } catch {
-            return "E:\\Games";
+            const stored = localStorage.getItem("sh_library_paths") || localStorage.getItem("library-paths");
+            if (stored) {
+                const paths = JSON.parse(stored);
+                if (Array.isArray(paths) && paths.length > 0) return paths;
+            }
+        } catch (e) {
+            console.warn("Failed to parse library paths from localStorage:", e);
         }
+        return [
+            "c:\\Users\\Administrator\\Documents\\Projects\\sh-lab\\data\\games",
+            "E:\\projects\\sh-lab\\data\\games"
+        ];
+    };
+
+    const getLibraryPath = (): string => {
+        return getConfiguredLibraryPaths()[0] || "c:\\Users\\Administrator\\Documents\\Projects\\sh-lab\\data\\games";
     };
 
     // Listen for install progress events
@@ -80,13 +98,13 @@ export function GameDetailsPage() {
         };
     }, []);
 
-    // Check if game is installed on mount
+    // Check if game is running or installed on mount (R3 pre-flight verification)
     useEffect(() => {
-        const checkInstallStatus = async () => {
+        const checkLocalInstallStatus = async () => {
             if (!game) return;
 
             try {
-                // Check if game is running
+                // Check if running
                 const isRunning = await invoke<boolean>("is_game_running_command", {
                     gameId: game.id,
                 });
@@ -96,20 +114,106 @@ export function GameDetailsPage() {
                     return;
                 }
 
-                // TODO: Check if game is installed by looking for sh_meta.json
-                // For now, we'll assume not installed if not running
-                // A proper check would scan the library path
+                // Check store state
+                if (gameIsInstalled) {
+                    setGameState("installed");
+                    return;
+                }
+
+                // R3: Pre-flight local disk check across configured library paths
+                const verifyResult = await invoke<LocalVerificationResult>("verify_local_game_command", {
+                    libraryPaths: getConfiguredLibraryPaths(),
+                    gameId: game.id,
+                    gameTitle: game.title,
+                    steamAppId: game.steam_app_id || null,
+                    expectedExe: (game as any).executable_path || null,
+                });
+
+                if (verifyResult.found && verifyResult.verified_binary && verifyResult.path) {
+                    addInstalledGame({
+                        id: game.id,
+                        path: verifyResult.path,
+                    });
+                    setGameState("installed");
+                } else if (verifyResult.found && !verifyResult.verified_binary) {
+                    console.warn(`Local directory found for "${game.title}" but executable signature check failed (verified_binary: false). Treating as uninstalled.`);
+                }
             } catch (err) {
-                console.error("Failed to check game status:", err);
+                console.error("Local disk precheck failed:", err);
             }
         };
 
-        checkInstallStatus();
-    }, [game]);
+        checkLocalInstallStatus();
+    }, [game, gameIsInstalled]);
 
+    // Handle Add to Library (R2: Records ownership without network transfer)
+    const handleAddToLibrary = async () => {
+        if (!game) return;
+        try {
+            await addToLibrary(game.id, {
+                id: game.id,
+                title: game.title,
+                cover_url: game.cover_url,
+                header_image: game.header_image,
+                background_url: (game as any).background_url || game.header_image,
+                description: game.short_description || game.description,
+                developer: game.developer,
+                publisher: game.publisher,
+                release_date: game.release_date,
+                rating: game.rating,
+                genres: game.genres,
+                categories: game.categories?.map((c: any) => typeof c === 'string' ? c : c.description),
+                steam_app_id: game.steam_app_id,
+                playtime_minutes: game.playtime_minutes || 0,
+            });
+            setSuccessMessage(`Added "${game.title}" to your library!`);
+            setTimeout(() => setSuccessMessage(null), 4000);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        }
+    };
+
+    // Handle Install (R2 & R3: Registers ownership AND verifies local disk before network transfer)
     const handleInstall = async () => {
         if (!game) return;
         setError(null);
+
+        // R2: Both registers in library AND dispatches install
+        await addToLibrary(game.id, {
+            id: game.id,
+            title: game.title,
+            cover_url: game.cover_url,
+            header_image: game.header_image,
+            playtime_minutes: game.playtime_minutes || 0
+        });
+
+        // R3: Pre-flight local verification before network download
+        try {
+            const verifyResult = await invoke<LocalVerificationResult>("verify_local_game_command", {
+                libraryPaths: getConfiguredLibraryPaths(),
+                gameId: game.id,
+                gameTitle: game.title,
+                steamAppId: game.steam_app_id || null,
+                expectedExe: (game as any).executable_path || null,
+            });
+
+            if (verifyResult.found && verifyResult.verified_binary && verifyResult.path) {
+                addInstalledGame({
+                    id: game.id,
+                    path: verifyResult.path,
+                });
+                setGameState("installed");
+                setSuccessMessage(`Detected local installation for "${game.title}". Linked as installed!`);
+                setTimeout(() => setSuccessMessage(null), 5000);
+                return; // SKIP NETWORK DOWNLOAD!
+            } else if (verifyResult.found && !verifyResult.verified_binary) {
+                console.warn(`Local directory found for "${game.title}" but executable signature check failed. Falling back to network download.`);
+            }
+        } catch (scanErr) {
+            console.warn("Pre-flight local verification check error:", scanErr);
+        }
+
+        // Local files not found: Proceed with network installation
         setGameState("installing");
         setInstallProgress({
             game_id: game.id,
@@ -138,6 +242,13 @@ export function GameDetailsPage() {
             setInstallProgress(null);
         }
     };
+
+    // Auto-trigger install if routed with ?install=1
+    useEffect(() => {
+        if (searchParams.get("install") === "1" && game && gameState === "not_installed") {
+            handleInstall();
+        }
+    }, [searchParams, game, gameState]);
 
     const handleLaunch = async () => {
         if (!game) return;
@@ -240,63 +351,45 @@ export function GameDetailsPage() {
                 </div>
             )}
 
-            {/* Install Progress Overlay */}
-            {gameState === "installing" && installProgress && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center">
-                    <div className="bg-zinc-900 border border-white/10 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
-                        <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-                            <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
-                            Installing {game.title}
-                        </h3>
-
-                        <div className="space-y-4">
-                            {/* Progress bar */}
-                            <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-gradient-to-r from-violet-600 to-indigo-600 transition-all duration-300"
-                                    style={{ width: `${installProgress.percent}%` }}
-                                />
-                            </div>
-
-                            <div className="flex justify-between text-sm">
-                                <span className="text-zinc-400 truncate max-w-[200px]">
-                                    {installProgress.current_file}
-                                </span>
-                                <span className="text-white font-medium">
-                                    {Math.round(installProgress.percent)}%
-                                </span>
-                            </div>
-
-                            {installProgress.files_total > 0 && (
-                                <p className="text-xs text-zinc-500">
-                                    {installProgress.files_done} / {installProgress.files_total} files
-                                </p>
-                            )}
-                        </div>
+            {/* Install Progress Floating Overlay */}
+            {installProgress && (
+                <div className="fixed bottom-6 right-6 z-50 p-4 rounded-xl bg-zinc-900/95 border border-violet-500/40 text-white shadow-2xl backdrop-blur-md max-w-sm">
+                    <div className="flex items-center justify-between gap-4 mb-1.5">
+                        <span className="text-xs font-bold text-violet-300">Installing {game.title}</span>
+                        <span className="text-xs font-extrabold text-violet-400">{installProgress.percent.toFixed(0)}%</span>
                     </div>
+                    <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden mb-1.5">
+                        <div
+                            className="bg-violet-500 h-full transition-all duration-200"
+                            style={{ width: `${installProgress.percent}%` }}
+                        />
+                    </div>
+                    <p className="text-[11px] text-zinc-400 truncate">{installProgress.current_file}</p>
                 </div>
             )}
 
-            {/* Hero Banner */}
-            <div className="relative h-[400px] overflow-hidden">
-                {backgroundImage && (
-                    <>
-                        <img
-                            src={backgroundImage}
-                            alt=""
-                            className="absolute inset-0 w-full h-full object-cover scale-110 blur-sm"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-background" />
-                    </>
-                )}
-
+            {/* Back Button */}
+            <div className="max-w-7xl mx-auto px-6 pt-6">
                 <button
                     onClick={() => navigate(-1)}
-                    className="absolute top-6 left-6 z-10 flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm rounded-lg text-white transition-colors"
+                    className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors"
                 >
                     <ArrowLeft className="w-4 h-4" />
-                    Back
+                    <span>Back</span>
                 </button>
+            </div>
+
+            {/* Hero Banner */}
+            <div className="relative h-[480px] w-full overflow-hidden mt-4">
+                {backgroundImage && (
+                    <img
+                        src={backgroundImage}
+                        alt={game.title}
+                        className="w-full h-full object-cover"
+                    />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-transparent to-transparent" />
 
                 <div className="absolute bottom-0 left-0 right-0 p-8 z-20">
                     <div className="max-w-5xl">
@@ -361,112 +454,76 @@ export function GameDetailsPage() {
                         </div>
 
                         {/* Tab Content */}
-                        <div className="min-h-[300px]">
+                        <div className="space-y-6">
                             {activeTab === "about" && (
                                 <div className="space-y-6">
                                     {game.short_description && (
-                                        <p className="text-lg text-zinc-300 leading-relaxed">
+                                        <p className="text-lg text-zinc-300 leading-relaxed font-medium">
                                             {game.short_description}
                                         </p>
                                     )}
 
-                                    {game.about_the_game && (
-                                        <div className="prose prose-invert max-w-none">
-                                            <h3 className="text-xl font-semibold text-white mb-4">About This Game</h3>
-                                            <div
-                                                className="text-zinc-400 leading-relaxed"
-                                                dangerouslySetInnerHTML={{ __html: game.about_the_game }}
-                                            />
-                                        </div>
+                                    {game.description && (
+                                        <div
+                                            className="text-zinc-400 leading-relaxed space-y-4"
+                                            dangerouslySetInnerHTML={{
+                                                __html: game.description.replace(/\n/g, "<br/>"),
+                                            }}
+                                        />
                                     )}
 
-                                    {!game.about_the_game && game.description && (
-                                        <div>
-                                            <h3 className="text-xl font-semibold text-white mb-4">Description</h3>
-                                            <p className="text-zinc-400 leading-relaxed whitespace-pre-line">
-                                                {game.description}
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    {game.steam_app_id && (
-                                        <a
-                                            href={`https://store.steampowered.com/app/${game.steam_app_id}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors"
-                                        >
-                                            <ExternalLink className="w-4 h-4" />
-                                            View on Steam
-                                        </a>
+                                    {!game.short_description && !game.description && (
+                                        <p className="text-zinc-500 italic">No description available.</p>
                                     )}
                                 </div>
                             )}
 
                             {activeTab === "requirements" && (
-                                <div className="space-y-8">
-                                    {((game.platforms?.windows ?? true) || !game.platforms) && game.pc_requirements && (
+                                <div className="space-y-6">
+                                    {game.pc_requirements ? (
                                         <div>
-                                            <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                                                🖥️ Windows
+                                            <h3 className="text-lg font-semibold text-white mb-3">
+                                                PC Requirements
                                             </h3>
                                             <div
-                                                className="text-zinc-400 text-sm leading-relaxed bg-zinc-900/50 rounded-lg p-4"
-                                                dangerouslySetInnerHTML={{ __html: game.pc_requirements }}
+                                                className="text-zinc-400 text-sm leading-relaxed bg-zinc-900/50 p-6 rounded-xl border border-white/5"
+                                                dangerouslySetInnerHTML={{
+                                                    __html: game.pc_requirements,
+                                                }}
                                             />
                                         </div>
-                                    )}
-
-                                    {game.platforms?.mac && game.mac_requirements && (
-                                        <div>
-                                            <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                                                🍎 macOS
-                                            </h3>
-                                            <div
-                                                className="text-zinc-400 text-sm leading-relaxed bg-zinc-900/50 rounded-lg p-4"
-                                                dangerouslySetInnerHTML={{ __html: game.mac_requirements }}
-                                            />
-                                        </div>
-                                    )}
-
-                                    {game.platforms?.linux && game.linux_requirements && (
-                                        <div>
-                                            <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                                                🐧 Linux
-                                            </h3>
-                                            <div
-                                                className="text-zinc-400 text-sm leading-relaxed bg-zinc-900/50 rounded-lg p-4"
-                                                dangerouslySetInnerHTML={{ __html: game.linux_requirements }}
-                                            />
-                                        </div>
-                                    )}
-
-                                    {(!game.pc_requirements && (!game.platforms?.mac || !game.mac_requirements) && (!game.platforms?.linux || !game.linux_requirements)) && (
-                                        <p className="text-zinc-500">No system requirements available for this game.</p>
+                                    ) : (
+                                        <p className="text-zinc-500 italic">
+                                            System requirements not specified.
+                                        </p>
                                     )}
                                 </div>
                             )}
 
                             {activeTab === "achievements" && (() => {
-                                const achievementsList = (game.achievements && game.achievements.length > 0)
+                                const list = (game.achievements && game.achievements.length > 0)
                                     ? game.achievements
-                                    : (game.achievements_highlighted || []);
-                                const totalAchievements = game.achievements_total || achievementsList.length;
+                                    : (game.achievements_highlighted && game.achievements_highlighted.length > 0)
+                                        ? game.achievements_highlighted
+                                        : [];
 
-                                if (achievementsList.length === 0) {
-                                    return <p className="text-zinc-500">No achievements available for this game.</p>;
+                                if (list.length === 0) {
+                                    return (
+                                        <p className="text-zinc-500 italic">
+                                            No achievements available for this game.
+                                        </p>
+                                    );
                                 }
 
                                 return (
-                                    <div>
-                                        <div className="flex items-center justify-between mb-6">
-                                            <p className="text-zinc-400">
-                                                This game has <span className="text-white font-semibold">{totalAchievements}</span> achievements.
-                                            </p>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between text-sm text-zinc-400 pb-2 border-b border-white/5">
+                                            <span>{list.length} total achievements</span>
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {achievementsList.map((achievement: any, index: number) => {
-                                                const iconUrl = achievement.icon || achievement.path;
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {list.map((achievement: any, index: number) => {
+                                                const iconUrl = achievement.icon || achievement.icon_gray;
                                                 const title = achievement.displayName || achievement.name;
                                                 const isHidden = Boolean(achievement.hidden);
                                                 const isRevealed = revealedAchievements.has(achievement.name);
@@ -542,9 +599,11 @@ export function GameDetailsPage() {
                         <div className="sticky top-24">
                             <GameInfoPanel
                                 game={game}
-                                isInstalled={gameState === "installed" || gameState === "playing"}
+                                isInstalled={gameState === "installed" || gameState === "playing" || gameIsInstalled}
+                                isInLibrary={gameInLibrary}
                                 onInstall={gameState === "not_installed" ? handleInstall : undefined}
                                 onLaunch={gameState === "playing" ? handleStopGame : handleLaunch}
+                                onAddToLibrary={handleAddToLibrary}
                             />
 
                             {/* Playing indicator */}

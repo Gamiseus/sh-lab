@@ -20,6 +20,13 @@ class AdminTask:
             "current": 0,
             "total": 0,
             "percent": 0,
+            "percentage": 0,
+            "bytes_downloaded": 0,
+            "total_bytes": 0,
+            "speed_bytes_sec": 0.0,
+            "speed_mb_sec": 0.0,
+            "eta_seconds": None,
+            "status": "queued",
             "message": "Initializing..."
         }
         self.started_at = datetime.now(timezone.utc).isoformat()
@@ -58,16 +65,37 @@ class AdminTask:
             if dq in self._subscribers:
                 self._subscribers.remove(dq)
 
-    def set_progress(self, current: int, total: int, message: str = ""):
+    def set_progress(
+        self,
+        current: int,
+        total: int,
+        message: str = "",
+        speed_bytes_sec: float = 0.0,
+        speed_mb_sec: float = 0.0,
+        eta_seconds: Optional[float] = None,
+        status: Optional[str] = None,
+        bytes_downloaded: Optional[int] = None,
+        total_bytes: Optional[int] = None,
+        **extra
+    ):
         """Update progress metrics and notify subscribers."""
         percent = int((current / total * 100)) if total > 0 else 0
         percent = max(0, min(100, percent))
+        b_down = bytes_downloaded if bytes_downloaded is not None else current
+        t_bytes = total_bytes if total_bytes is not None else total
         self.progress = {
             "current": current,
             "total": total,
             "percent": percent,
             "percentage": percent,
-            "message": message or self.progress.get("message", "")
+            "bytes_downloaded": b_down,
+            "total_bytes": t_bytes,
+            "speed_bytes_sec": speed_bytes_sec,
+            "speed_mb_sec": speed_mb_sec,
+            "eta_seconds": eta_seconds,
+            "status": status or self.progress.get("status", "running"),
+            "message": message or self.progress.get("message", ""),
+            **extra
         }
 
         # Broadcast progress update
