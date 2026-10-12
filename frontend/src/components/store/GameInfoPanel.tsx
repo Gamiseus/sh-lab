@@ -26,23 +26,32 @@ export function GameInfoPanel({ game, isInstalled = false, onInstall, onLaunch }
             {/* Main CTA */}
             <div className="p-6 border-b border-white/5">
                 {/* Price */}
-                {game.price_cents !== undefined && (
-                    <div className="flex items-center gap-3 mb-4">
-                        {game.discount_percent && game.discount_percent > 0 && (
-                            <>
-                                <span className="px-2 py-1 bg-green-600 text-white text-sm font-bold rounded">
-                                    -{game.discount_percent}%
-                                </span>
-                                <span className="text-zinc-500 line-through text-lg">
-                                    ${(game.price_cents / 100).toFixed(2)}
-                                </span>
-                            </>
-                        )}
-                        <span className="text-2xl font-bold text-white">
-                            {formatPrice(game.price_cents, game.discount_percent)}
-                        </span>
-                    </div>
-                )}
+                {game.price_cents !== undefined && (() => {
+                    const hasDiscount = Boolean(game.discount_percent && game.discount_percent > 0);
+                    const originalPriceCents = (hasDiscount && game.price_cents)
+                        ? Math.round(game.price_cents / (1 - (game.discount_percent! / 100)))
+                        : null;
+
+                    return (
+                        <div className="flex items-center gap-3 mb-4">
+                            {hasDiscount && (
+                                <>
+                                    <span className="px-2 py-1 bg-green-600 text-white text-sm font-bold rounded">
+                                        -{game.discount_percent}%
+                                    </span>
+                                    {originalPriceCents && (
+                                        <span className="text-zinc-500 line-through text-lg">
+                                            {formatPrice(originalPriceCents)}
+                                        </span>
+                                    )}
+                                </>
+                            )}
+                            <span className="text-2xl font-bold text-white">
+                                {formatPrice(game.price_cents)}
+                            </span>
+                        </div>
+                    );
+                })()}
 
                 {/* Action Buttons */}
                 <div className="space-y-3">
@@ -85,7 +94,7 @@ export function GameInfoPanel({ game, isInstalled = false, onInstall, onLaunch }
                 {/* Metacritic */}
                 {game.metacritic_score && (
                     <div className="flex items-center justify-between">
-                        <span className="text-zinc-400">Metacritic</span>
+                        <span className="text-zinc-400">Metacritic Score</span>
                         <a
                             href={game.metacritic_url}
                             target="_blank"
@@ -106,36 +115,48 @@ export function GameInfoPanel({ game, isInstalled = false, onInstall, onLaunch }
                 )}
 
                 {/* Steam Reviews */}
-                {game.steam_review_percent !== undefined && game.steam_review_count && (
-                    <div className="flex items-center justify-between">
-                        <span className="text-zinc-400">User Reviews</span>
-                        <div className="text-right">
-                            <div className={`font-semibold ${game.steam_review_percent >= 70
-                                ? "text-blue-400"
-                                : game.steam_review_percent >= 40
-                                    ? "text-yellow-400"
-                                    : "text-red-400"
-                                }`}>
-                                {game.steam_review_percent >= 70
-                                    ? "Very Positive"
-                                    : game.steam_review_percent >= 40
-                                        ? "Mixed"
-                                        : "Negative"}
-                            </div>
-                            <div className="text-xs text-zinc-500">
-                                {game.steam_review_count.toLocaleString()} reviews
+                {game.steam_review_percent !== undefined && game.steam_review_count !== undefined && game.steam_review_count > 0 && (() => {
+                    const reviewDesc = game.steam_review_desc || (
+                        game.steam_review_percent >= 95 ? "Overwhelmingly Positive" :
+                        game.steam_review_percent >= 80 ? "Very Positive" :
+                        game.steam_review_percent >= 70 ? "Mostly Positive" :
+                        game.steam_review_percent >= 40 ? "Mixed" :
+                        "Negative"
+                    );
+
+                    const colorClass = game.steam_review_percent >= 70
+                        ? "text-blue-400"
+                        : game.steam_review_percent >= 40
+                            ? "text-yellow-400"
+                            : "text-red-400";
+
+                    return (
+                        <div className="flex items-center justify-between">
+                            <span className="text-zinc-400">Steam User Reviews</span>
+                            <div className="text-right">
+                                <div className={`font-semibold ${colorClass}`}>
+                                    {reviewDesc}
+                                </div>
+                                <div className="text-xs text-zinc-400">
+                                    {game.steam_review_percent}% Positive · {game.steam_review_count.toLocaleString()} reviews
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    );
+                })()}
 
                 {/* IGDB Rating */}
                 {game.rating && (
                     <div className="flex items-center justify-between">
-                        <span className="text-zinc-400">Rating</span>
+                        <span className="text-zinc-400">IGDB Rating</span>
                         <div className="flex items-center gap-2">
                             <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                            <span className="font-semibold">{game.rating.toFixed(1)}</span>
+                            <span className="font-semibold text-white">
+                                {game.rating > 10 ? (game.rating / 10).toFixed(1) : game.rating.toFixed(1)} / 10
+                            </span>
+                            <span className="text-xs text-zinc-500">
+                                ({Math.round(game.rating)}%)
+                            </span>
                         </div>
                     </div>
                 )}

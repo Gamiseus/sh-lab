@@ -45,6 +45,7 @@ export function GameDetailsPage() {
     const [installProgress, setInstallProgress] = useState<InstallProgress | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [revealedAchievements, setRevealedAchievements] = useState<Set<string>>(new Set());
 
     const { data: game, isLoading, error: fetchError } = useQuery({
         queryKey: ["game", id],
@@ -404,7 +405,7 @@ export function GameDetailsPage() {
 
                             {activeTab === "requirements" && (
                                 <div className="space-y-8">
-                                    {game.pc_requirements && (
+                                    {((game.platforms?.windows ?? true) || !game.platforms) && game.pc_requirements && (
                                         <div>
                                             <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                                                 🖥️ Windows
@@ -416,7 +417,7 @@ export function GameDetailsPage() {
                                         </div>
                                     )}
 
-                                    {game.mac_requirements && (
+                                    {game.platforms?.mac && game.mac_requirements && (
                                         <div>
                                             <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                                                 🍎 macOS
@@ -428,7 +429,7 @@ export function GameDetailsPage() {
                                         </div>
                                     )}
 
-                                    {game.linux_requirements && (
+                                    {game.platforms?.linux && game.linux_requirements && (
                                         <div>
                                             <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                                                 🐧 Linux
@@ -440,42 +441,95 @@ export function GameDetailsPage() {
                                         </div>
                                     )}
 
-                                    {!game.pc_requirements && !game.mac_requirements && !game.linux_requirements && (
+                                    {(!game.pc_requirements && (!game.platforms?.mac || !game.mac_requirements) && (!game.platforms?.linux || !game.linux_requirements)) && (
                                         <p className="text-zinc-500">No system requirements available for this game.</p>
                                     )}
                                 </div>
                             )}
 
-                            {activeTab === "achievements" && (
-                                <div>
-                                    {game.achievements_highlighted && game.achievements_highlighted.length > 0 ? (
-                                        <>
-                                            <p className="text-zinc-400 mb-6">
-                                                This game has {game.achievements_total} achievements.
+                            {activeTab === "achievements" && (() => {
+                                const achievementsList = (game.achievements && game.achievements.length > 0)
+                                    ? game.achievements
+                                    : (game.achievements_highlighted || []);
+                                const totalAchievements = game.achievements_total || achievementsList.length;
+
+                                if (achievementsList.length === 0) {
+                                    return <p className="text-zinc-500">No achievements available for this game.</p>;
+                                }
+
+                                return (
+                                    <div>
+                                        <div className="flex items-center justify-between mb-6">
+                                            <p className="text-zinc-400">
+                                                This game has <span className="text-white font-semibold">{totalAchievements}</span> achievements.
                                             </p>
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                                {(game.achievements_highlighted || []).map((achievement, index) => (
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {achievementsList.map((achievement: any, index: number) => {
+                                                const iconUrl = achievement.icon || achievement.path;
+                                                const title = achievement.displayName || achievement.name;
+                                                const isHidden = Boolean(achievement.hidden);
+                                                const isRevealed = revealedAchievements.has(achievement.name);
+                                                const percent = achievement.percent !== undefined ? Number(achievement.percent) : null;
+
+                                                return (
                                                     <div
-                                                        key={index}
-                                                        className="flex items-center gap-3 p-3 bg-zinc-900/50 rounded-lg"
+                                                        key={achievement.name || index}
+                                                        className="flex items-start gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-white/10 transition-colors"
                                                     >
-                                                        <img
-                                                            src={achievement.path}
-                                                            alt={achievement.name}
-                                                            className="w-12 h-12"
-                                                        />
-                                                        <span className="text-white font-medium">
-                                                            {achievement.name}
-                                                        </span>
+                                                        {iconUrl ? (
+                                                            <img
+                                                                src={iconUrl}
+                                                                alt={title}
+                                                                className="w-14 h-14 rounded-lg object-cover flex-shrink-0 bg-zinc-800"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-14 h-14 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0 text-zinc-500">
+                                                                🏆
+                                                            </div>
+                                                        )}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <h4 className="text-white font-semibold truncate text-base">
+                                                                    {title}
+                                                                </h4>
+                                                                {percent !== null && (
+                                                                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30 whitespace-nowrap">
+                                                                        {percent.toFixed(1)}%
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            {isHidden && !isRevealed ? (
+                                                                <div className="flex items-center gap-2 mt-1">
+                                                                    <span className="text-xs text-zinc-500 italic">
+                                                                        Hidden achievement
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setRevealedAchievements(prev => {
+                                                                            const next = new Set(prev);
+                                                                            next.add(achievement.name);
+                                                                            return next;
+                                                                        })}
+                                                                        className="text-xs font-medium text-violet-400 hover:text-violet-300 hover:underline px-2 py-0.5 bg-violet-900/30 rounded border border-violet-500/20 transition-colors"
+                                                                    >
+                                                                        Reveal
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                                                                    {achievement.description || "No description provided."}
+                                                                </p>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <p className="text-zinc-500">No achievements available for this game.</p>
-                                    )}
-                                </div>
-                            )}
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
                             {activeTab === "reviews" && (
                                 <ReviewList gameId={game.id} />

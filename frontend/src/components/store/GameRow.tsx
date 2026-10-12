@@ -11,6 +11,7 @@ interface GameRowProps {
     seeAllLink?: string;
     cardSize?: "sm" | "md" | "lg";
     showPrice?: boolean;
+    headerExtra?: React.ReactNode;
 }
 
 export function GameRow({
@@ -19,7 +20,8 @@ export function GameRow({
     games,
     seeAllLink,
     cardSize = "md",
-    showPrice = false
+    showPrice = false,
+    headerExtra
 }: GameRowProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -55,20 +57,23 @@ export function GameRow({
     return (
         <section className="relative group/section">
             {/* Header */}
-            <div className="flex items-center justify-between mb-4 px-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 px-1 gap-2">
                 <div className="flex items-center gap-3">
                     {icon && <span className="text-xl">{icon}</span>}
                     <h2 className="text-xl font-bold text-white">{title}</h2>
                     <span className="text-sm text-zinc-500">({games.length})</span>
                 </div>
-                {seeAllLink && (
-                    <Link
-                        to={seeAllLink}
-                        className="text-sm text-violet-400 hover:text-violet-300 transition-colors"
-                    >
-                        See All →
-                    </Link>
-                )}
+                <div className="flex items-center gap-3">
+                    {headerExtra}
+                    {seeAllLink && (
+                        <Link
+                            to={seeAllLink}
+                            className="text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                        >
+                            See All →
+                        </Link>
+                    )}
+                </div>
             </div>
 
             {/* Scroll Container */}

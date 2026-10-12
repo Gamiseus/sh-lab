@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { X, ChevronLeft, ChevronRight, Play, Maximize2 } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Play, Maximize2, Volume2, VolumeX } from "lucide-react";
 import { Screenshot, Movie, API_BASE } from "@/lib/api";
 import Hls from "hls.js";
 
@@ -15,32 +15,60 @@ const getSecureUrl = (url?: string) => {
     return url;
 };
 
-// Thumbnail Component (Base64)
+const getScreenshotFull = (s?: any): string | undefined => {
+    if (!s) return undefined;
+    return s.path_full || s.full || s.path;
+};
+
+const getScreenshotThumb = (s?: any): string | undefined => {
+    if (!s) return undefined;
+    return s.path_thumbnail || s.thumbnail || s.path;
+};
+
+// Thumbnail Component (Base64 + Direct Proxy Fallback)
 const MediaThumbnail = ({ url, alt, isActive }: { url?: string, alt: string, isActive: boolean }) => {
     const [b64Src, setB64Src] = useState<string | null>(null);
+    const [useDirect, setUseDirect] = useState(false);
+
+    const directProxyUrl = useMemo(() => {
+        if (!url) return undefined;
+        return `${API_BASE}/store/proxy/image?url=${encodeURIComponent(getSecureUrl(url)!)}`;
+    }, [url]);
 
     useEffect(() => {
         if (!url) return;
         setB64Src(null);
+        setUseDirect(false);
 
         // Fetch Base64
         const u = `${API_BASE}/store/proxy/image/base64?url=${encodeURIComponent(getSecureUrl(url)!)}`;
         fetch(u)
             .then(res => res.ok ? res.json() : null)
             .then(data => {
-                if (data) setB64Src(`data:${data.mime};base64,${data.data}`);
+                if (data && data.data) {
+                    setB64Src(`data:${data.mime};base64,${data.data}`);
+                } else {
+                    setUseDirect(true);
+                }
             })
-            .catch(console.error);
+            .catch(() => setUseDirect(true));
     }, [url]);
 
-    if (!b64Src) {
+    if (!url) {
+        return <div className="w-full h-full bg-zinc-800 flex items-center justify-center text-xs text-zinc-600">No Image</div>;
+    }
+
+    if (!b64Src && !useDirect) {
         return <div className="w-full h-full bg-black/40 animate-pulse" />;
     }
 
     return (
         <img
-            src={b64Src}
+            src={b64Src || directProxyUrl}
             alt={alt}
+            onError={() => {
+                if (!useDirect && directProxyUrl) setUseDirect(true);
+            }}
             className={`w-full h-full object-cover transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100'}`}
         />
     );
@@ -57,7 +85,6 @@ interface MediaViewerProps {
 // Video Proxy (Streaming)
 const getProxyVideoUrl = (url?: string) => {
     if (!url) return undefined;
-    // Pass secure URL to proxy
     return `${API_BASE}/store/proxy/video?url=${encodeURIComponent(getSecureUrl(url)!)}`;
 };
 
@@ -65,7 +92,11 @@ const MediaViewer = ({ media, title, isPlaying, setIsPlaying, onOpenLightbox }: 
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<Hls | null>(null);
 
-    // Base64 State for Images
+    // Audio State for Videos
+    const [isMuted, setIsMuted] = useState(false);
+    const [_volume, setVolume] = useState(1.0);
+
+    // Image State
     const [b64Src, setB64Src] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -74,11 +105,8 @@ const MediaViewer = ({ media, title, isPlaying, setIsPlaying, onOpenLightbox }: 
         if (media.type !== "video") return null;
         const video = media as Movie;
 
-        // HLS (m3u8) usually handles itself (segments), but if it needs proxying it's harder.
-        // Assuming HLS is fine direct if CORS allows. If fails, we might need M3U8 proxy.
         if (video.hls) return { type: 'hls', url: getSecureUrl(video.hls) };
 
-        // MP4/WebM -> Use Streaming Proxy
         if (video.mp4) {
             const src = typeof video.mp4 === 'string' ? video.mp4 : (video.mp4.max || video.mp4["480"]);
             if (src) return { type: 'mp4', url: getProxyVideoUrl(src) };
@@ -116,29 +144,31 @@ const MediaViewer = ({ media, title, isPlaying, setIsPlaying, onOpenLightbox }: 
         }
     }, [isPlaying, media, source]);
 
-    // Base64 Fetch Logic (Only for Images)
+    // Image Fetch Logic (Both Base64 & Direct Proxy Fallback)
     useEffect(() => {
         if (media.type === "image") {
-            const s = media as Screenshot;
-            const fullPath = s.path_full;
+            const fullPath = getScreenshotFull(media);
             if (!fullPath) return;
 
             setIsLoading(true);
             setB64Src(null);
 
-            // Fetch Base64
             const u = `${API_BASE}/store/proxy/image/base64?url=${encodeURIComponent(getSecureUrl(fullPath)!)}`;
             fetch(u)
                 .then(res => {
-                    if (!res.ok) throw new Error("Proxy Failed");
+                    if (!res.ok) throw new Error("Base64 Proxy Failed");
                     return res.json();
                 })
                 .then(data => {
-                    setB64Src(`data:${data.mime};base64,${data.data}`);
+                    if (data && data.data) {
+                        setB64Src(`data:${data.mime};base64,${data.data}`);
+                    } else {
+                        setB64Src(`${API_BASE}/store/proxy/image?url=${encodeURIComponent(getSecureUrl(fullPath)!)}`);
+                    }
                     setIsLoading(false);
                 })
-                .catch(err => {
-                    console.error("Image Fetch Error", err);
+                .catch(() => {
+                    setB64Src(`${API_BASE}/store/proxy/image?url=${encodeURIComponent(getSecureUrl(fullPath)!)}`);
                     setIsLoading(false);
                 });
         }
@@ -146,26 +176,49 @@ const MediaViewer = ({ media, title, isPlaying, setIsPlaying, onOpenLightbox }: 
 
     if (media.type === "video") {
         const video = media as Movie;
-        // Also fetch Poster as Base64 to ensure it loads?
-        // Reuse MediaThumbnail logic? 
-        // Or fetch manually here.
-        // For simplicity, let's just use MediaThumbnail component inside?
-        // Cannot nest invalidly.
-        // I'll inline fetch for poster too.
 
         return (
             <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-white/5">
                 {isPlaying && source ? (
-                    <video
-                        ref={videoRef}
-                        src={source.type !== 'hls' ? source.url : undefined}
-                        controls
-                        autoPlay
-                        muted
-                        playsInline
-                        crossOrigin="anonymous"
-                        className="w-full h-full object-contain"
-                    />
+                    <div className="relative w-full h-full">
+                        <video
+                            ref={videoRef}
+                            src={source.type !== 'hls' ? source.url : undefined}
+                            controls
+                            autoPlay
+                            muted={isMuted}
+                            playsInline
+                            crossOrigin="anonymous"
+                            className="w-full h-full object-contain"
+                            onVolumeChange={(e) => {
+                                setIsMuted(e.currentTarget.muted);
+                                setVolume(e.currentTarget.volume);
+                            }}
+                        />
+                        {/* Audio control floating badge/toggle */}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (videoRef.current) {
+                                    videoRef.current.muted = !isMuted;
+                                    setIsMuted(!isMuted);
+                                }
+                            }}
+                            className="absolute top-4 left-4 z-20 px-3 py-1.5 bg-black/70 hover:bg-black/90 backdrop-blur-md rounded-lg text-white text-xs font-medium flex items-center gap-2 border border-white/10 transition-colors shadow-lg"
+                        >
+                            {isMuted ? (
+                                <>
+                                    <VolumeX className="w-4 h-4 text-red-400" />
+                                    <span>Unmute</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Volume2 className="w-4 h-4 text-green-400" />
+                                    <span>Mute</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
                 ) : (
                     <>
                         {/* Poster Image */}
@@ -188,26 +241,40 @@ const MediaViewer = ({ media, title, isPlaying, setIsPlaying, onOpenLightbox }: 
         );
     }
 
-    // Image Render (Base64)
+    // Image Render
+    const fullPath = getScreenshotFull(media);
+
     return (
         <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden group border border-white/5 flex items-center justify-center">
             {isLoading && (
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
             )}
 
-            {b64Src && (
+            {b64Src ? (
                 <img
                     src={b64Src}
                     alt={`${title} screenshot`}
-                    className="w-full h-full object-contain"
-                    // Add Lightbox trigger behavior to image itself too?
+                    className="w-full h-full object-contain cursor-pointer"
+                    onClick={onOpenLightbox}
+                    onError={() => {
+                        if (fullPath && !b64Src.includes("/store/proxy/image?url=")) {
+                            setB64Src(`${API_BASE}/store/proxy/image?url=${encodeURIComponent(getSecureUrl(fullPath)!)}`);
+                        }
+                    }}
+                />
+            ) : !isLoading && fullPath ? (
+                <img
+                    src={`${API_BASE}/store/proxy/image?url=${encodeURIComponent(getSecureUrl(fullPath)!)}`}
+                    alt={`${title} screenshot`}
+                    className="w-full h-full object-contain cursor-pointer"
                     onClick={onOpenLightbox}
                 />
-            )}
+            ) : null}
 
             <button
                 onClick={onOpenLightbox}
                 className="absolute top-4 right-4 p-2 rounded-lg bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70 backdrop-blur-sm"
+                aria-label="Open Lightbox"
             >
                 <Maximize2 className="w-5 h-5 text-white" />
             </button>
@@ -219,6 +286,7 @@ export function MediaGallery({ screenshots = [], movies = [], title }: MediaGall
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [isLightbox, setIsLightbox] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
+    const stripRef = useRef<HTMLDivElement>(null);
 
     // Combine movies and screenshots
     const allMedia = useMemo(() => [
@@ -240,6 +308,13 @@ export function MediaGallery({ screenshots = [], movies = [], title }: MediaGall
         setIsPlaying(false);
     };
 
+    const scrollThumbnails = (direction: "left" | "right") => {
+        if (stripRef.current) {
+            const offset = direction === "left" ? -250 : 250;
+            stripRef.current.scrollBy({ left: offset, behavior: "smooth" });
+        }
+    };
+
     return (
         <div className="space-y-4">
             {/* Main Display */}
@@ -257,12 +332,14 @@ export function MediaGallery({ screenshots = [], movies = [], title }: MediaGall
                     <>
                         <button
                             onClick={goPrev}
+                            aria-label="Previous Media"
                             className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 backdrop-blur-sm"
                         >
                             <ChevronLeft className="w-6 h-6 text-white" />
                         </button>
                         <button
                             onClick={goNext}
+                            aria-label="Next Media"
                             className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 backdrop-blur-sm"
                         >
                             <ChevronRight className="w-6 h-6 text-white" />
@@ -271,65 +348,79 @@ export function MediaGallery({ screenshots = [], movies = [], title }: MediaGall
                 )}
             </div>
 
-            {/* Thumbnail Strip */}
+            {/* Thumbnail Strip with visible horizontal scrollbar and navigation */}
             {allMedia.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
-                    {allMedia.map((media, idx) => {
-                        const isVideo = media.type === "video";
-                        const rawThumb = isVideo
-                            ? (media as Movie).thumbnail
-                            : (media as Screenshot).path_thumbnail;
+                <div className="relative group/strip">
+                    <button
+                        onClick={() => scrollThumbnails("left")}
+                        aria-label="Scroll thumbnails left"
+                        className="absolute left-1 top-1/2 -translate-y-1/2 z-10 w-7 h-10 rounded bg-black/70 hover:bg-black/90 text-white flex items-center justify-center opacity-0 group-hover/strip:opacity-100 transition-opacity border border-white/10"
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <div
+                        ref={stripRef}
+                        className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-zinc-700 hover:scrollbar-thumb-zinc-500 scrollbar-track-zinc-900/60"
+                    >
+                        {allMedia.map((media, idx) => {
+                            const isVideo = media.type === "video";
+                            const rawThumb = isVideo
+                                ? (media as Movie).thumbnail
+                                : getScreenshotThumb(media);
 
-                        // Use MediaThumbnail for everything
-                        return (
-                            <button
-                                key={idx}
-                                onClick={() => {
-                                    setSelectedIndex(idx);
-                                    setIsPlaying(false);
-                                }}
-                                className={`
-                  relative flex-shrink-0 w-24 h-14 rounded-lg overflow-hidden
-                  border-2 transition-all group
-                  ${idx === selectedIndex
-                                        ? "border-violet-500 ring-2 ring-violet-500/30"
-                                        : "border-transparent hover:border-white/30"
-                                    }
-                `}
-                            >
-                                <MediaThumbnail
-                                    url={rawThumb}
-                                    alt="thumbnail"
-                                    isActive={idx === selectedIndex}
-                                />
-                                {isVideo && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                                        <Play className="w-4 h-4 text-white fill-current" />
-                                    </div>
-                                )}
-                            </button>
-                        );
-                    })}
+                            return (
+                                <button
+                                    key={idx}
+                                    onClick={() => {
+                                        setSelectedIndex(idx);
+                                        setIsPlaying(false);
+                                    }}
+                                    className={`
+                                        relative flex-shrink-0 w-24 h-14 rounded-lg overflow-hidden
+                                        border-2 transition-all group
+                                        ${idx === selectedIndex
+                                            ? "border-violet-500 ring-2 ring-violet-500/30"
+                                            : "border-transparent hover:border-white/30"
+                                        }
+                                    `}
+                                >
+                                    <MediaThumbnail
+                                        url={rawThumb}
+                                        alt="thumbnail"
+                                        isActive={idx === selectedIndex}
+                                    />
+                                    {isVideo && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                            <Play className="w-4 h-4 text-white fill-current" />
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <button
+                        onClick={() => scrollThumbnails("right")}
+                        aria-label="Scroll thumbnails right"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-7 h-10 rounded bg-black/70 hover:bg-black/90 text-white flex items-center justify-center opacity-0 group-hover/strip:opacity-100 transition-opacity border border-white/10"
+                    >
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
                 </div>
             )}
 
-            {/* Lightbox - Uses MediaThumbnail or Image directly via Base64 proxy manually?
-                We can reuse MediaViewer inside Lightbox or just Image with Base64 fetch.
-                We'll rewrite Lightbox content to perform the fetch.
-             */}
+            {/* Lightbox */}
             {isLightbox && currentMedia.type === "image" && (
                 <div
                     className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
                     onClick={() => setIsLightbox(false)}
                 >
-                    {/* ... Controls ... */}
-                    <button onClick={() => setIsLightbox(false)} className="absolute top-4 right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors z-50"><X className="w-6 h-6 text-white" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); goPrev(); }} className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-50"><ChevronLeft className="w-8 h-8 text-white" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); goNext(); }} className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-50"><ChevronRight className="w-8 h-8 text-white" /></button>
+                    <button onClick={() => setIsLightbox(false)} aria-label="Close Lightbox" className="absolute top-4 right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors z-50"><X className="w-6 h-6 text-white" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); goPrev(); }} aria-label="Previous" className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-50"><ChevronLeft className="w-8 h-8 text-white" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); goNext(); }} aria-label="Next" className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-50"><ChevronRight className="w-8 h-8 text-white" /></button>
 
                     <div className="w-[90vw] h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
                         <MediaThumbnail
-                            url={(currentMedia as Screenshot).path_full}
+                            url={getScreenshotFull(currentMedia)}
                             alt="Lightbox"
                             isActive={true}
                         />

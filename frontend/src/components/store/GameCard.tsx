@@ -67,7 +67,7 @@ export function GameCard({ game, size = "md", showPrice = false, className = "" 
                 </div>
 
                 {/* Discount Badge */}
-                {game.discount_percent && game.discount_percent > 0 && (
+                {Boolean(game.discount_percent && game.discount_percent > 0) && (
                     <div className="absolute top-2 right-2 px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">
                         -{game.discount_percent}%
                     </div>
@@ -105,17 +105,17 @@ export function GameCard({ game, size = "md", showPrice = false, className = "" 
                         {game.rating && (
                             <div className="flex items-center gap-1 text-yellow-500">
                                 <Star className="w-3 h-3 fill-current" />
-                                <span className="text-xs">{game.rating.toFixed(1)}</span>
+                                <span className="text-xs">{game.rating > 10 ? (game.rating / 10).toFixed(1) : game.rating.toFixed(1)}</span>
                             </div>
                         )}
                         <div className="flex items-center gap-2">
-                            {game.discount_percent && game.discount_percent > 0 && game.price_cents && (
+                            {Boolean(game.discount_percent && game.discount_percent > 0 && game.price_cents) && (
                                 <span className="text-xs text-zinc-500 line-through">
-                                    ${(game.price_cents / 100).toFixed(2)}
+                                    {formatPrice(Math.round(game.price_cents! / (1 - (game.discount_percent! / 100))))}
                                 </span>
                             )}
                             <span className="text-sm font-bold text-violet-400">
-                                {formatPrice(game.price_cents, game.discount_percent)}
+                                {formatPrice(game.price_cents)}
                             </span>
                         </div>
                     </div>

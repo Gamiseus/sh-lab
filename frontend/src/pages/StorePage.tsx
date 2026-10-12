@@ -12,6 +12,7 @@ import type { Game } from "@/lib/api";
 export function StorePage() {
     const [searchParams, setSearchParams] = useSearchParams();
     const [limit, setLimit] = useState(50);
+    const [topRatedSort, setTopRatedSort] = useState<"steam_score" | "metacritic" | "igdb">("steam_score");
 
     // Derived state from URL
     const searchQuery = searchParams.get("search") || "";
@@ -41,8 +42,8 @@ export function StorePage() {
     });
 
     const { data: topRated = [] } = useQuery<Game[]>({
-        queryKey: ["store", "top-rated"],
-        queryFn: () => storeAPI.getTopRated(12),
+        queryKey: ["store", "top-rated", topRatedSort],
+        queryFn: () => storeAPI.getTopRated(12, topRatedSort),
     });
 
     const { data: genres = [] } = useQuery<string[]>({
@@ -64,6 +65,7 @@ export function StorePage() {
             category: selectedCategories.length > 0 ? selectedCategories : undefined,
             limit: limit,
         }),
+        placeholderData: (previousData) => previousData,
     });
 
     const toggleGenre = (genre: string) => {
@@ -106,16 +108,20 @@ export function StorePage() {
         }, { replace: true });
     };
 
-    const isFiltering = searchQuery || selectedGenres.length > 0 || selectedCategories.length > 0;
+    const isFiltering = Boolean(searchQuery || selectedGenres.length > 0 || selectedCategories.length > 0);
 
     return (
         <div className="min-h-screen pb-12">
-            {/* Hero Section */}
-            {!isFiltering && (
+            {/* Hero Section with smooth collapse/expand transition */}
+            <div
+                className={`overflow-hidden transition-all duration-500 ease-in-out ${
+                    isFiltering ? "max-h-0 opacity-0 pointer-events-none" : "max-h-[600px] opacity-100"
+                }`}
+            >
                 <section className="px-6 pt-6">
                     <HeroCarousel games={featured} />
                 </section>
-            )}
+            </div>
 
             {/* Search & Filters Bar */}
             <section className="sticky top-0 z-20 px-6 py-6 bg-background/90 backdrop-blur-xl border-b border-white/5 shadow-2xl shadow-black/20">
@@ -269,6 +275,44 @@ export function StorePage() {
                             games={topRated}
                             cardSize="md"
                             showPrice
+                            headerExtra={
+                                <div className="flex items-center gap-1.5 bg-zinc-900/90 p-1 rounded-xl border border-white/10 text-xs">
+                                    <span className="text-zinc-500 px-1.5 font-medium hidden md:inline">Sort:</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setTopRatedSort("steam_score")}
+                                        className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                                            topRatedSort === "steam_score"
+                                                ? "bg-blue-600 text-white shadow-sm"
+                                                : "text-zinc-400 hover:text-white"
+                                        }`}
+                                    >
+                                        Steam Score
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setTopRatedSort("metacritic")}
+                                        className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                                            topRatedSort === "metacritic"
+                                                ? "bg-green-600 text-white shadow-sm"
+                                                : "text-zinc-400 hover:text-white"
+                                        }`}
+                                    >
+                                        Metacritic
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setTopRatedSort("igdb")}
+                                        className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                                            topRatedSort === "igdb"
+                                                ? "bg-yellow-600 text-white shadow-sm"
+                                                : "text-zinc-400 hover:text-white"
+                                        }`}
+                                    >
+                                        IGDB
+                                    </button>
+                                </div>
+                            }
                         />
                     )}
 
