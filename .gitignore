@@ -117,3 +117,5 @@ temp_body.json
 PROJECT.md
 TEST_INFRA.md
 TEST_READY.md
+/backend/steamcmd
+/backend/steamcmd/linux32

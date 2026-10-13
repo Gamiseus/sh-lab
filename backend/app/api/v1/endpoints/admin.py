@@ -3,13 +3,17 @@ import os
 import asyncio
 import json
 import platform
+import io
+import zipfile
+import tarfile
+import httpx
 from typing import List, Optional, Any, Dict
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from starlette.responses import StreamingResponse
 from sqlmodel import Session, select, or_, func
 from pydantic import BaseModel
-from app.core.db import get_session
+from app.core.db import get_session, engine
 from app.core.config import settings
 from app.core.auth import require_admin
 from app.core.security import hash_password
@@ -1049,12 +1053,6 @@ async def run_steam_login_task(task_id: str, steamcmd_path: str, username: str, 
 # SteamCMD Management (Admin Only)
 # ============================================================
 
-import httpx
-import zipfile
-import tarfile
-import io
-import platform
-
 STEAMCMD_WINDOWS_URL = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
 STEAMCMD_LINUX_URL = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz"
 
@@ -1110,6 +1108,12 @@ async def run_steamcmd_download_task(task_id: str, steamcmd_path: str):
             with zipfile.ZipFile(io.BytesIO(content)) as zf:
                 zf.extractall(steamcmd_path)
         else:
+            for root, dirs, files in os.walk(steamcmd_path):
+                for f in files:
+                    try:
+                        os.chmod(os.path.join(root, f), 0o755)
+                    except Exception:
+                        pass
             with tarfile.open(fileobj=io.BytesIO(content), mode="r:gz") as tf:
                 tf.extractall(steamcmd_path)
 
@@ -1155,6 +1159,17 @@ async def get_steamcmd_status(
     exe_name = "steamcmd.exe" if is_windows else "steamcmd.sh"
     exe_path = os.path.join(steamcmd_path, exe_name)
     exe_exists = os.path.exists(exe_path)
+
+    installed_config = session.get(SystemConfig, "steamcmd_installed")
+    is_installed = (installed_config and installed_config.value.lower() == "true") or exe_exists
+
+    if exe_exists and (not installed_config or installed_config.value.lower() != "true"):
+        if not installed_config:
+            session.add(SystemConfig(key="steamcmd_installed", value="true", value_type="bool", description="SteamCMD installation status"))
+        else:
+            installed_config.value = "true"
+            session.add(installed_config)
+        session.commit()
 
     username = settings.STEAM_USERNAME or (session.get(SystemConfig, "steam_username").value if session.get(SystemConfig, "steam_username") else None)
     has_token = _license_service.has_cached_token(username, steamcmd_path) if username else False
