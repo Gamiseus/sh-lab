@@ -6,8 +6,14 @@ from app.core.config import settings
 logger = logging.getLogger("uvicorn.error")
 
 # Create database engine
-# echo=True logs all SQL queries — only enable in development
-engine = create_engine(settings.DATABASE_URL, echo=os.getenv("SQL_ECHO", "").lower() == "true")
+engine = create_engine(
+    settings.DATABASE_URL,
+    echo=os.getenv("SQL_ECHO", "").lower() == "true",
+    pool_size=20,
+    max_overflow=20,
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
 
 # Columns added after initial schema creation. create_all() never alters existing
 # tables, so new columns are added here idempotently.

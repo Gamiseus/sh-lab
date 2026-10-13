@@ -522,8 +522,6 @@ async def prepare_install(
 async def stream_task_events(
     task_id: str,
     token: Optional[str] = None,
-    session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     R4.3: Server-Sent Events (SSE) stream broadcasting download progress, state, and logs.
@@ -583,18 +581,19 @@ async def download_file(
     game_id: int,
     file_path: str,
     request: Request,
-    session: Session = Depends(get_session)
 ):
     """
     R4.4 & R4.6: Download a specific file with HTTP 206 Range partial content streaming.
     Blocks directory traversal with HTTP 403.
     """
-    game = session.get(Game, game_id)
-    if not game:
-        raise HTTPException(status_code=404, detail="Game not found")
+    with Session(engine) as session:
+        game = session.get(Game, game_id)
+        if not game:
+            raise HTTPException(status_code=404, detail="Game not found")
+        game_title = game.title
 
     repo_path = os.path.abspath(settings.GAMES_REPO_PATH)
-    game_folder = os.path.abspath(os.path.join(repo_path, game.title))
+    game_folder = os.path.abspath(os.path.join(repo_path, game_title))
     full_path = os.path.abspath(os.path.join(game_folder, file_path))
 
     # Security: Strict directory traversal prevention (R4.6)

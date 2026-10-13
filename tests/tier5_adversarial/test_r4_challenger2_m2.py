@@ -43,7 +43,8 @@ def test_adv_r4_install_request_uncached_game(api_client: httpx.Client, admin_he
     
     # Pick a title not currently cached on disk
     repo_dirs = set(os.listdir(os.path.join("data", "repo"))) if os.path.exists(os.path.join("data", "repo")) else set()
-    uncached_games = [g for g in games if g["title"] not in repo_dirs]
+    repo_dirs_normalized = {d.replace("", ":") for d in repo_dirs} | repo_dirs
+    uncached_games = [g for g in games if g["title"] not in repo_dirs_normalized]
     assert len(uncached_games) > 0, "Expected at least one uncached game in catalog"
     target_game = uncached_games[0]
 
@@ -106,7 +107,8 @@ def test_adv_r4_task_sse_stream_events_format(api_client: httpx.Client, admin_to
     assert games_resp.status_code == 200
     games = games_resp.json()
     repo_dirs = set(os.listdir(os.path.join("data", "repo"))) if os.path.exists(os.path.join("data", "repo")) else set()
-    uncached_games = [g for g in games if g["title"] not in repo_dirs]
+    repo_dirs_normalized = {d.replace("", ":") for d in repo_dirs} | repo_dirs
+    uncached_games = [g for g in games if g["title"] not in repo_dirs_normalized]
     assert len(uncached_games) > 0
 
     target_game = uncached_games[0]

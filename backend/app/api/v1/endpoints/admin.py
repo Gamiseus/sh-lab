@@ -77,8 +77,7 @@ async def cancel_admin_task(
 @router.get("/tasks/{task_id}/stream")
 async def stream_task_events(
     task_id: str,
-    token: Optional[str] = None,
-    session: Session = Depends(get_session)
+    token: Optional[str] = None
 ):
     """
     Server-Sent Events (SSE) stream for live task logs and progress.
@@ -90,10 +89,11 @@ async def stream_task_events(
         payload = decode_token(token)
         if payload and "sub" in payload:
             sub_val = payload["sub"]
-            try:
-                user = session.get(User, int(sub_val))
-            except (ValueError, TypeError):
-                user = session.exec(select(User).where(User.username == sub_val)).first()
+            with Session(engine) as session:
+                try:
+                    user = session.get(User, int(sub_val))
+                except (ValueError, TypeError):
+                    user = session.exec(select(User).where(User.username == sub_val)).first()
 
     if not user or not user.is_admin:
         raise HTTPException(status_code=401, detail="Admin authorization required")

@@ -3,6 +3,7 @@ import { RefreshCw, Trash2, Search, SlidersHorizontal, Gamepad2, Settings, Shopp
 import { Link, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useLibraryStore, LocalGameData, GameMetadata, LibraryGame, LocalVerificationResult } from "../stores/LibraryStore";
+import { useDownloadStore } from "@/stores/DownloadStore";
 import { api, getImageUrl } from "@/lib/api";
 
 export function LibraryPage() {
@@ -144,7 +145,15 @@ export function LibraryPage() {
       console.warn("Pre-flight check in LibraryPage:", err);
     }
 
-    navigate(`/games/${game.id}?install=1`);
+    // Dispatch download to download queue and route to Downloads page
+    await useDownloadStore.getState().enqueueDownload({
+      id: game.id,
+      title: game.title,
+      cover_url: game.cover_url,
+      header_image: (game as any).header_image,
+      autoStart: true,
+    });
+    navigate("/downloads");
   };
 
   const filteredGames = useMemo(() => {

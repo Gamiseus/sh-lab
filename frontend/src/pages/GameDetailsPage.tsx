@@ -9,6 +9,7 @@ import { MediaGallery } from "@/components/store/MediaGallery";
 import { GameInfoPanel } from "@/components/store/GameInfoPanel";
 import { ReviewList } from "@/components/reviews/ReviewList";
 import { useLibraryStore, LocalVerificationResult } from "@/stores/LibraryStore";
+import { useDownloadStore } from "@/stores/DownloadStore";
 
 type Tab = "about" | "requirements" | "achievements" | "reviews";
 
@@ -41,7 +42,7 @@ type GameState = "not_installed" | "installing" | "installed" | "playing";
 export function GameDetailsPage() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState<Tab>("about");
     const [gameState, setGameState] = useState<GameState>("not_installed");
     const [installProgress, setInstallProgress] = useState<InstallProgress | null>(null);
@@ -213,40 +214,31 @@ export function GameDetailsPage() {
             console.warn("Pre-flight local verification check error:", scanErr);
         }
 
-        // Local files not found: Proceed with network installation
-        setGameState("installing");
-        setInstallProgress({
-            game_id: game.id,
-            current_file: "Preparing...",
-            files_done: 0,
-            files_total: 0,
-            bytes_done: 0,
-            bytes_total: 0,
-            percent: 0
-        });
-
+        // Local files not found: Proceed with network installation via DownloadStore
         try {
-            await invoke("install_game_command", {
-                backendUrl: "http://localhost:8000",
-                gameId: game.id,
-                libraryPath: getLibraryPath(),
+            await useDownloadStore.getState().enqueueDownload({
+                id: game.id,
+                title: game.title,
+                cover_url: game.cover_url,
+                header_image: game.header_image,
+                autoStart: true,
             });
-            setGameState("installed");
-            setSuccessMessage("Game installed successfully!");
-            setTimeout(() => setSuccessMessage(null), 5000);
+            navigate("/downloads");
         } catch (err) {
             console.error("Install failed:", err);
             setError(err instanceof Error ? err.message : String(err));
-            setGameState("not_installed");
-        } finally {
-            setInstallProgress(null);
         }
     };
 
     // Auto-trigger install if routed with ?install=1
     useEffect(() => {
-        if (searchParams.get("install") === "1" && game && gameState === "not_installed") {
-            handleInstall();
+        if (searchParams.get("install") === "1" && game) {
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete("install");
+            setSearchParams(newParams, { replace: true });
+            if (gameState === "not_installed") {
+                handleInstall();
+            }
         }
     }, [searchParams, game, gameState]);
 

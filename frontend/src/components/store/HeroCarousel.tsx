@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Play, Info, Star, Sparkles, Download } from 
 import { invoke } from "@tauri-apps/api/core";
 import { Game, getImageUrl, formatPrice } from "@/lib/api";
 import { useLibraryStore, LocalVerificationResult } from "@/stores/LibraryStore";
+import { useDownloadStore } from "@/stores/DownloadStore";
 
 interface HeroCarouselProps {
     games: Game[];
@@ -145,8 +146,15 @@ export function HeroCarousel({ games, autoPlayInterval = 8000, hidePrice = false
             console.warn("Pre-flight check in HeroCarousel:", err);
         }
 
-        // 3. Dispatch installation request by routing to GameDetails with ?install=1
-        navigate(`/games/${currentGame.id}?install=1`);
+        // 3. Dispatch download to download queue and navigate to Downloads page
+        await useDownloadStore.getState().enqueueDownload({
+            id: currentGame.id,
+            title: currentGame.title,
+            cover_url: currentGame.cover_url,
+            header_image: currentGame.header_image,
+            autoStart: true,
+        });
+        navigate("/downloads");
     };
 
     return (

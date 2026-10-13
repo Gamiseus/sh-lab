@@ -355,10 +355,17 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
       let totalBytes = activeItem.totalBytes;
       let files: Array<{ path: string; size: number }> = [];
 
-      if (prepResp.ok) {
-        const prepData = await prepResp.json();
-        totalBytes = prepData.total_size || totalBytes;
-        files = Array.isArray(prepData.files) ? prepData.files : [];
+      if (!prepResp.ok) {
+        const errorData = await prepResp.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Server preparation failed: ${prepResp.statusText}`);
+      }
+
+      const prepData = await prepResp.json();
+      totalBytes = prepData.total_size || totalBytes;
+      files = Array.isArray(prepData.files) ? prepData.files : [];
+
+      if (files.length === 0) {
+        throw new Error("No game files found on server repository");
       }
 
       set((s) => ({

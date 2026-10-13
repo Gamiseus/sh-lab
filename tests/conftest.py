@@ -90,3 +90,18 @@ def mock_local_library(tmp_path):
     lib_dir.mkdir(parents=True, exist_ok=True)
     yield lib_dir
     shutil.rmtree(lib_dir, ignore_errors=True)
+
+
+@pytest.fixture(scope="function", autouse=True)
+def ensure_test_sample_files():
+    """Ensure sample.dat (100KB) and zero_byte.dat (0B) exist in Where the Water Tastes Like Wine repo folder."""
+    repo_wine = os.path.join("data", "repo", "Where the Water Tastes Like Wine")
+    os.makedirs(repo_wine, exist_ok=True)
+    sample_path = os.path.join(repo_wine, "sample.dat")
+    if not os.path.exists(sample_path) or os.path.getsize(sample_path) != 100000:
+        with open(sample_path, "wb") as f:
+            f.write(bytes([i % 256 for i in range(100000)]))
+    zero_path = os.path.join(repo_wine, "zero_byte.dat")
+    if not os.path.exists(zero_path) or os.path.getsize(zero_path) != 0:
+        with open(zero_path, "wb") as f:
+            pass
