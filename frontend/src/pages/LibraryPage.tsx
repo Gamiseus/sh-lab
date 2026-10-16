@@ -24,6 +24,10 @@ export function LibraryPage() {
   const uninstalledCount = games.length - installedCount;
 
   const handleScan = async () => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      alert("Disk scanning is only available in the desktop app.");
+      return;
+    }
     setIsScanning(true);
     try {
       const pathsJson = localStorage.getItem("sh_library_paths") || localStorage.getItem("library-paths");
@@ -80,7 +84,9 @@ export function LibraryPage() {
             return;
           }
 
-          await invoke("uninstall_game_command", { path: game.install_path });
+          if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+            await invoke("uninstall_game_command", { path: game.install_path });
+          }
           removeGame(game.id);
         } catch (err) {
           console.error("Uninstall failed:", err);
@@ -98,7 +104,7 @@ export function LibraryPage() {
     e.preventDefault();
     e.stopPropagation();
 
-    if (game.install_path) {
+    if (game.install_path && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
       try {
         await invoke("launch_game_command", {
           gamePath: game.install_path,
@@ -118,31 +124,33 @@ export function LibraryPage() {
     e.stopPropagation();
 
     // R3: Pre-check local disk before initiating network install
-    try {
-      const pathsJson = localStorage.getItem("sh_library_paths") || localStorage.getItem("library-paths");
-      const configuredPaths: string[] = pathsJson
-        ? JSON.parse(pathsJson)
-        : ["c:\\Users\\Administrator\\Documents\\Projects\\sh-lab\\data\\games", "E:\\projects\\sh-lab\\data\\games"];
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      try {
+        const pathsJson = localStorage.getItem("sh_library_paths") || localStorage.getItem("library-paths");
+        const configuredPaths: string[] = pathsJson
+          ? JSON.parse(pathsJson)
+          : ["c:\\Users\\Administrator\\Documents\\Projects\\sh-lab\\data\\games", "E:\\projects\\sh-lab\\data\\games"];
 
-      const verifyResult = await invoke<LocalVerificationResult>("verify_local_game_command", {
-        libraryPaths: configuredPaths,
-        gameId: game.id,
-        gameTitle: game.title,
-        steamAppId: game.steam_app_id || null,
-        expectedExe: null,
-      });
-
-      if (verifyResult.found && verifyResult.verified_binary && verifyResult.path) {
-        addInstalledGame({
-          id: game.id,
-          path: verifyResult.path,
+        const verifyResult = await invoke<LocalVerificationResult>("verify_local_game_command", {
+          libraryPaths: configuredPaths,
+          gameId: game.id,
+          gameTitle: game.title,
+          steamAppId: game.steam_app_id || null,
+          expectedExe: null,
         });
-        return;
-      } else if (verifyResult.found && !verifyResult.verified_binary) {
-        console.warn(`Local directory found for "${game.title}" but executable signature check failed. Redirecting to network installer.`);
+
+        if (verifyResult.found && verifyResult.verified_binary && verifyResult.path) {
+          addInstalledGame({
+            id: game.id,
+            path: verifyResult.path,
+          });
+          return;
+        } else if (verifyResult.found && !verifyResult.verified_binary) {
+          console.warn(`Local directory found for "${game.title}" but executable signature check failed. Redirecting to network installer.`);
+        }
+      } catch (err) {
+        console.warn("Pre-flight check in LibraryPage:", err);
       }
-    } catch (err) {
-      console.warn("Pre-flight check in LibraryPage:", err);
     }
 
     // Dispatch download to download queue and route to Downloads page

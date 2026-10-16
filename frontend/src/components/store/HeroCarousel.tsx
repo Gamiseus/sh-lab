@@ -81,7 +81,7 @@ export function HeroCarousel({ games, autoPlayInterval = 8000, hidePrice = false
         e.preventDefault();
         e.stopPropagation();
         const localGame = installedGames[currentGame.id];
-        if (localGame?.path) {
+        if (localGame?.path && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
             try {
                 await invoke("launch_game_command", {
                     gamePath: localGame.path,
@@ -118,32 +118,34 @@ export function HeroCarousel({ games, autoPlayInterval = 8000, hidePrice = false
         });
 
         // 2. Pre-flight check on local disk (R3 requirement)
-        try {
-            const configuredPaths: string[] = JSON.parse(
-                localStorage.getItem("sh_library_paths") ||
-                localStorage.getItem("library-paths") ||
-                '["c:\\\\Users\\\\Administrator\\\\Documents\\\\Projects\\\\sh-lab\\\\data\\\\games", "E:\\\\projects\\\\sh-lab\\\\data\\\\games"]'
-            );
-            const verifyResult = await invoke<LocalVerificationResult>("verify_local_game_command", {
-                libraryPaths: configuredPaths,
-                gameId: currentGame.id,
-                gameTitle: currentGame.title,
-                steamAppId: currentGame.steam_app_id || null,
-                expectedExe: (currentGame as any).executable_path || null,
-            });
-
-            if (verifyResult.found && verifyResult.verified_binary && verifyResult.path) {
-                addInstalledGame({
-                    id: currentGame.id,
-                    path: verifyResult.path,
+        if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+            try {
+                const configuredPaths: string[] = JSON.parse(
+                    localStorage.getItem("sh_library_paths") ||
+                    localStorage.getItem("library-paths") ||
+                    '["c:\\\\Users\\\\Administrator\\\\Documents\\\\Projects\\\\sh-lab\\\\data\\\\games", "E:\\\\projects\\\\sh-lab\\\\data\\\\games"]'
+                );
+                const verifyResult = await invoke<LocalVerificationResult>("verify_local_game_command", {
+                    libraryPaths: configuredPaths,
+                    gameId: currentGame.id,
+                    gameTitle: currentGame.title,
+                    steamAppId: currentGame.steam_app_id || null,
+                    expectedExe: (currentGame as any).executable_path || null,
                 });
-                navigate(`/games/${currentGame.id}`);
-                return;
-            } else if (verifyResult.found && !verifyResult.verified_binary) {
-                console.warn(`Local directory found for "${currentGame.title}" but executable signature check failed. Redirecting to network installer.`);
+
+                if (verifyResult.found && verifyResult.verified_binary && verifyResult.path) {
+                    addInstalledGame({
+                        id: currentGame.id,
+                        path: verifyResult.path,
+                    });
+                    navigate(`/games/${currentGame.id}`);
+                    return;
+                } else if (verifyResult.found && !verifyResult.verified_binary) {
+                    console.warn(`Local directory found for "${currentGame.title}" but executable signature check failed. Redirecting to network installer.`);
+                }
+            } catch (err) {
+                console.warn("Pre-flight check in HeroCarousel:", err);
             }
-        } catch (err) {
-            console.warn("Pre-flight check in HeroCarousel:", err);
         }
 
         // 3. Dispatch download to download queue and navigate to Downloads page
@@ -168,14 +170,14 @@ export function HeroCarousel({ games, autoPlayInterval = 8000, hidePrice = false
             aria-label="Featured Games Carousel"
         >
             {/* 3D Multi-Card Track with Looping Desaturated Side Cards */}
-            <div className="relative min-h-[460px] md:min-h-[480px] w-full flex items-center justify-center">
+            <div className="relative min-h-[480px] lg:min-h-[520px] w-full flex items-center justify-center">
 
                 {/* Left Side Background Preview Card (Desaturated) */}
                 {games.length > 1 && (
                     <div
                         onClick={goPrev}
                         className="
-                            absolute left-0 w-[22%] lg:w-[24%] h-[82%]
+                            absolute left-0 w-[22%] lg:w-[24%] top-4 bottom-4 md:top-6 md:bottom-6
                             rounded-2xl overflow-hidden cursor-pointer hidden md:block z-10
                             border border-white/10 shadow-2xl transition-all duration-500
                             filter grayscale-[60%] opacity-40 hover:opacity-85 hover:grayscale-0 hover:scale-[1.02]
@@ -195,11 +197,11 @@ export function HeroCarousel({ games, autoPlayInterval = 8000, hidePrice = false
                 )}
 
                 {/* Center Active Featured Card (Sharp Contained Split Layout) */}
-                <div className="relative w-full md:w-[78%] lg:w-[74%] h-full rounded-2xl overflow-hidden border border-white/10 bg-zinc-950/95 shadow-2xl z-20 backdrop-blur-xl">
-                    <div className="flex flex-col md:flex-row h-full min-h-[460px]">
+                <div className="relative w-full md:w-[78%] lg:w-[74%] rounded-2xl overflow-hidden border border-white/10 bg-zinc-950/95 shadow-2xl z-20 backdrop-blur-xl">
+                    <div className="flex flex-col md:flex-row min-h-[480px] lg:min-h-[520px]">
 
                         {/* Left: Constrained Media Area (Prevents Low-Res Stretch) */}
-                        <div className="relative md:w-[60%] aspect-video md:aspect-auto md:min-h-[460px] overflow-hidden bg-black flex items-center justify-center">
+                        <div className="relative md:w-[58%] lg:w-[60%] aspect-video md:aspect-auto min-h-[260px] md:min-h-[480px] overflow-hidden bg-black flex items-center justify-center">
                             {/* Ambient Blurred Backdrop for mood & aspect safety */}
                             {activeImageSrc && (
                                 <img
@@ -263,8 +265,8 @@ export function HeroCarousel({ games, autoPlayInterval = 8000, hidePrice = false
                         </div>
 
                         {/* Right: Info, Preview Strip & Actions Panel */}
-                        <div className="md:w-[40%] p-6 md:p-7 flex flex-col justify-between bg-zinc-900/60 border-t md:border-t-0 md:border-l border-white/10 z-20">
-                            <div className="space-y-3.5">
+                        <div className="md:w-[42%] lg:w-[40%] p-5 sm:p-6 lg:p-7 flex flex-col justify-between bg-zinc-900/60 border-t md:border-t-0 md:border-l border-white/10 z-20">
+                            <div className="space-y-3">
                                 {/* Genre Chips */}
                                 <div className="flex flex-wrap items-center gap-1.5">
                                     {currentGame.genres?.slice(0, 3).map((genre) => (
@@ -279,7 +281,7 @@ export function HeroCarousel({ games, autoPlayInterval = 8000, hidePrice = false
 
                                 {/* Title */}
                                 <div>
-                                    <h2 className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight line-clamp-2">
+                                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight line-clamp-2">
                                         {currentGame.title}
                                     </h2>
                                     {currentGame.steam_review_desc && (
@@ -291,7 +293,7 @@ export function HeroCarousel({ games, autoPlayInterval = 8000, hidePrice = false
                                 </div>
 
                                 {/* Summary */}
-                                <p className="text-xs lg:text-sm text-zinc-400 line-clamp-3 leading-relaxed">
+                                <p className="text-xs sm:text-sm text-zinc-400 line-clamp-2 sm:line-clamp-3 leading-relaxed">
                                     {currentGame.short_description || currentGame.description || "Discover this highlighted title in the store catalog with authentic achievements and updates."}
                                 </p>
 
@@ -328,7 +330,7 @@ export function HeroCarousel({ games, autoPlayInterval = 8000, hidePrice = false
                             </div>
 
                             {/* Pricing & CTA Buttons */}
-                            <div className="pt-5 mt-3 border-t border-white/5 space-y-3">
+                            <div className="pt-4 mt-auto border-t border-white/5 space-y-3 shrink-0">
                                 {!hidePrice && (
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
@@ -405,7 +407,7 @@ export function HeroCarousel({ games, autoPlayInterval = 8000, hidePrice = false
                     <div
                         onClick={goNext}
                         className="
-                            absolute right-0 w-[22%] lg:w-[24%] h-[82%]
+                            absolute right-0 w-[22%] lg:w-[24%] top-4 bottom-4 md:top-6 md:bottom-6
                             rounded-2xl overflow-hidden cursor-pointer hidden md:block z-10
                             border border-white/10 shadow-2xl transition-all duration-500
                             filter grayscale-[60%] opacity-40 hover:opacity-85 hover:grayscale-0 hover:scale-[1.02]

@@ -131,9 +131,9 @@ def ensure_test_catalog_seeded():
 
                 # Ensure cache entry for 281
                 cur.execute("""
-                    INSERT INTO server_game_cache (game_id, title, steam_app_id, is_cached, cached_size_bytes, build_id)
-                    VALUES (281, 'Where the Water Tastes Like Wine', 447120, true, 100000, '12345')
-                    ON CONFLICT (game_id) DO UPDATE SET is_cached = true, cached_size_bytes = 100000
+                    INSERT INTO server_game_cache (game_id, title, steam_app_id, is_cached, cached_size_bytes, build_id, updated_at)
+                    VALUES (281, 'Where the Water Tastes Like Wine', 447120, true, 100000, '12345', NOW())
+                    ON CONFLICT (game_id) DO UPDATE SET is_cached = true, cached_size_bytes = 100000, updated_at = NOW()
                 """)
 
                 # Ensure 261 (Half-Life 2)
@@ -143,9 +143,9 @@ def ensure_test_catalog_seeded():
                     WHERE NOT EXISTS (SELECT 1 FROM game WHERE id = 261)
                 """)
                 cur.execute("""
-                    INSERT INTO server_game_cache (game_id, title, steam_app_id, is_cached, build_id)
-                    VALUES (261, 'Half-Life 2', 220, true, '12346')
-                    ON CONFLICT (game_id) DO UPDATE SET is_cached = true
+                    INSERT INTO server_game_cache (game_id, title, steam_app_id, is_cached, cached_size_bytes, build_id, updated_at)
+                    VALUES (261, 'Half-Life 2', 220, true, 0, '12346', NOW())
+                    ON CONFLICT (game_id) DO UPDATE SET is_cached = true, updated_at = NOW()
                 """)
 
                 # Ensure 578 (7 Days to Die)
@@ -155,9 +155,9 @@ def ensure_test_catalog_seeded():
                     WHERE NOT EXISTS (SELECT 1 FROM game WHERE id = 578)
                 """)
                 cur.execute("""
-                    INSERT INTO server_game_cache (game_id, title, steam_app_id, is_cached, build_id)
-                    VALUES (578, '7 Days to Die', 251570, true, '12347')
-                    ON CONFLICT (game_id) DO UPDATE SET is_cached = true
+                    INSERT INTO server_game_cache (game_id, title, steam_app_id, is_cached, cached_size_bytes, build_id, updated_at)
+                    VALUES (578, '7 Days to Die', 251570, true, 0, '12347', NOW())
+                    ON CONFLICT (game_id) DO UPDATE SET is_cached = true, updated_at = NOW()
                 """)
 
                 # Ensure 734 (Deduplication Test Game)
@@ -188,5 +188,5 @@ def ensure_test_catalog_seeded():
 
                 cur.execute("SELECT setval(pg_get_serial_sequence('game', 'id'), GREATEST((SELECT MAX(id) FROM game), 800))")
                 conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Warning: ensure_test_catalog_seeded encountered error: {e}")

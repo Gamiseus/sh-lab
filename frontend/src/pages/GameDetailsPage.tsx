@@ -84,18 +84,29 @@ export function GameDetailsPage() {
 
     // Listen for install progress events
     useEffect(() => {
-        const unlisten = listen<InstallProgress>("install-progress", (event) => {
-            setInstallProgress(event.payload);
-            if (event.payload.percent >= 100) {
-                setGameState("installed");
-                setInstallProgress(null);
-                setSuccessMessage("Game installed successfully!");
-                setTimeout(() => setSuccessMessage(null), 5000);
-            }
-        });
+        if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+            return;
+        }
+
+        let unlistenPromise: Promise<() => void> | null = null;
+        try {
+            unlistenPromise = listen<InstallProgress>("install-progress", (event) => {
+                setInstallProgress(event.payload);
+                if (event.payload.percent >= 100) {
+                    setGameState("installed");
+                    setInstallProgress(null);
+                    setSuccessMessage("Game installed successfully!");
+                    setTimeout(() => setSuccessMessage(null), 5000);
+                }
+            });
+        } catch (e) {
+            console.warn("Failed to listen for install-progress:", e);
+        }
 
         return () => {
-            unlisten.then((fn) => fn());
+            if (unlistenPromise) {
+                unlistenPromise.then((fn) => fn?.()).catch(() => {});
+            }
         };
     }, []);
 
@@ -103,6 +114,16 @@ export function GameDetailsPage() {
     useEffect(() => {
         const checkLocalInstallStatus = async () => {
             if (!game) return;
+
+            // Check store state first
+            if (gameIsInstalled) {
+                setGameState("installed");
+                return;
+            }
+
+            if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+                return;
+            }
 
             try {
                 // Check if running
@@ -112,12 +133,6 @@ export function GameDetailsPage() {
 
                 if (isRunning) {
                     setGameState("playing");
-                    return;
-                }
-
-                // Check store state
-                if (gameIsInstalled) {
-                    setGameState("installed");
                     return;
                 }
 
@@ -189,38 +204,42 @@ export function GameDetailsPage() {
         });
 
         // R3: Pre-flight local verification before network download
-        try {
-            const verifyResult = await invoke<LocalVerificationResult>("verify_local_game_command", {
-                libraryPaths: getConfiguredLibraryPaths(),
-                gameId: game.id,
-                gameTitle: game.title,
-                steamAppId: game.steam_app_id || null,
-                expectedExe: (game as any).executable_path || null,
-            });
-
-            if (verifyResult.found && verifyResult.verified_binary && verifyResult.path) {
-                addInstalledGame({
-                    id: game.id,
-                    path: verifyResult.path,
+        if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+            try {
+                const verifyResult = await invoke<LocalVerificationResult>("verify_local_game_command", {
+                    libraryPaths: getConfiguredLibraryPaths(),
+                    gameId: game.id,
+                    gameTitle: game.title,
+                    steamAppId: game.steam_app_id || null,
+                    expectedExe: (game as any).executable_path || null,
                 });
-                setGameState("installed");
-                setSuccessMessage(`Detected local installation for "${game.title}". Linked as installed!`);
-                setTimeout(() => setSuccessMessage(null), 5000);
-                return; // SKIP NETWORK DOWNLOAD!
-            } else if (verifyResult.found && !verifyResult.verified_binary) {
-                console.warn(`Local directory found for "${game.title}" but executable signature check failed. Falling back to network download.`);
+
+                if (verifyResult.found && verifyResult.verified_binary && verifyResult.path) {
+                    addInstalledGame({
+                        id: game.id,
+                        path: verifyResult.path,
+                    });
+                    setGameState("installed");
+                    setSuccessMessage(`Detected local installation for "${game.title}". Linked as installed!`);
+                    setTimeout(() => setSuccessMessage(null), 5000);
+                    return; // SKIP NETWORK DOWNLOAD!
+                } else if (verifyResult.found && !verifyResult.verified_binary) {
+                    console.warn(`Local directory found for "${game.title}" but executable signature check failed. Falling back to network download.`);
+                }
+            } catch (scanErr) {
+                console.warn("Pre-flight local verification check error:", scanErr);
             }
-        } catch (scanErr) {
-            console.warn("Pre-flight local verification check error:", scanErr);
         }
 
         // Local files not found: Proceed with network installation via DownloadStore
         try {
+            const installPath = `${getLibraryPath()}\\${game.title}`;
             await useDownloadStore.getState().enqueueDownload({
                 id: game.id,
                 title: game.title,
                 cover_url: game.cover_url,
                 header_image: game.header_image,
+                installPath,
                 autoStart: true,
             });
             navigate("/downloads");
@@ -245,6 +264,11 @@ export function GameDetailsPage() {
     const handleLaunch = async () => {
         if (!game) return;
         setError(null);
+
+        if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+            setError("Game launching is only supported in the desktop app.");
+            return;
+        }
 
         try {
             const libraryPath = getLibraryPath();
@@ -271,6 +295,11 @@ export function GameDetailsPage() {
 
     const handleStopGame = async () => {
         if (!game) return;
+
+        if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+            setGameState("installed");
+            return;
+        }
 
         try {
             const result = await invoke<PlaytimeUpdate>("stop_game_session_command", {

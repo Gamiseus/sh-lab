@@ -135,6 +135,37 @@ function saveStoredQueue(data: StoredQueueData) {
   }
 }
 
+async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
+  try {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      return await invoke<T>(cmd, args);
+    }
+  } catch (err) {
+    console.warn(`[DownloadStore] Tauri invoke ${cmd} failed:`, err);
+  }
+  return null;
+}
+
+function getPrimaryLibraryPath(): string {
+  try {
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+      const saved =
+        localStorage.getItem("sh_library_paths") ||
+        localStorage.getItem("library-paths");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]) {
+          return parsed[0];
+        }
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return "c:\\Users\\Administrator\\Documents\\Projects\\sh-lab\\data\\games";
+}
+
 // In-memory active streaming controllers
 const activeControllers: Map<number, AbortController> = new Map();
 const activeEventSources: Map<number, EventSource> = new Map();
@@ -207,7 +238,7 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
       progressPercent: 0,
       status: "queued",
       statusMessage: "Waiting in queue...",
-      installPath: options.installPath,
+      installPath: options.installPath || `${getPrimaryLibraryPath()}\\${options.title}`,
     };
 
     const newQueue = [...queue, newItem];
@@ -382,29 +413,46 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
       // 4. Client-side HTTP chunk streaming
       let downloadedBytes = activeItem.downloadedBytes;
       const startTime = performance.now();
+      const targetInstallDir =
+        activeItem.installPath || `${getPrimaryLibraryPath()}\\${activeItem.title}`;
 
       for (const file of files) {
         if (abortController.signal.aborted) break;
 
         const fileUrl = `${API_BASE}/library/download/${gameId}/${file.path}`;
+        const headers: Record<string, string> = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+        // RFC 7233: Only send Range if file has positive length (> 0).
+        // 0-byte files cannot satisfy any byte range and trigger HTTP 416 Range Not Satisfiable.
+        if (file.size > 0) {
+          headers["Range"] = `bytes=0-${file.size - 1}`;
+        }
+
         const fileResp = await fetch(fileUrl, {
-          headers: {
-            Range: `bytes=0-${file.size - 1}`,
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
+          headers,
           signal: abortController.signal,
         });
 
-        if (!fileResp.ok && fileResp.status !== 206) {
+        // 200, 206, or 416 on 0-byte file are acceptable completion statuses
+        const isSuccess =
+          fileResp.ok ||
+          fileResp.status === 206 ||
+          (file.size === 0 && fileResp.status === 416);
+
+        if (!isSuccess) {
           throw new Error(`Failed to stream ${file.path}: ${fileResp.statusText}`);
         }
 
-        const reader = fileResp.body?.getReader();
-        if (reader) {
+        const chunks: Uint8Array[] = [];
+        if (file.size > 0 && fileResp.body) {
+          const reader = fileResp.body.getReader();
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             if (value) {
+              chunks.push(value);
               downloadedBytes += value.length;
               const elapsedSec = (performance.now() - startTime) / 1000;
               get().updateProgress(
@@ -417,10 +465,49 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
             }
           }
         } else {
-          downloadedBytes += file.size;
+          // 0-byte file or response with empty body
           const elapsedSec = (performance.now() - startTime) / 1000;
-          get().updateProgress(gameId, downloadedBytes, totalBytes, elapsedSec);
+          get().updateProgress(
+            gameId,
+            downloadedBytes,
+            totalBytes,
+            elapsedSec,
+            `Streaming ${file.path}...`
+          );
         }
+
+        // If running in Tauri desktop app, persist file to target install directory
+        if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+          let fileBytes: Uint8Array;
+          if (chunks.length === 1) {
+            fileBytes = chunks[0];
+          } else if (chunks.length > 1) {
+            const totalChunkLength = chunks.reduce((acc, c) => acc + c.length, 0);
+            fileBytes = new Uint8Array(totalChunkLength);
+            let offset = 0;
+            for (const chunk of chunks) {
+              fileBytes.set(chunk, offset);
+              offset += chunk.length;
+            }
+          } else {
+            fileBytes = new Uint8Array(0);
+          }
+
+          await safeInvoke("save_game_file_command", {
+            gameDir: targetInstallDir,
+            relativePath: file.path,
+            data: Array.from(fileBytes),
+          });
+        }
+      }
+
+      // Finalize installation on disk if running under Tauri
+      if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+        await safeInvoke("finalize_game_installation_command", {
+          gameDir: targetInstallDir,
+          gameId,
+          gameTitle: activeItem.title,
+        });
       }
 
       // 5. Completion transition
@@ -448,9 +535,7 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
 
         // Register in LibraryStore as installed
         const libStore = useLibraryStore.getState();
-        const installDir =
-          currentActive.installPath ||
-          `c:\\Users\\Administrator\\Documents\\Projects\\sh-lab\\data\\games\\${currentActive.title}`;
+        const installDir = targetInstallDir;
         libStore.addInstalledGame({
           id: gameId,
           path: installDir,

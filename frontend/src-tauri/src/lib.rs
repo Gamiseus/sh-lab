@@ -111,6 +111,41 @@ async fn get_install_size_command(
     game_installer::get_install_size(&backend_url, game_id).await
 }
 
+#[tauri::command]
+async fn save_game_file_command(
+    game_dir: String,
+    relative_path: String,
+    data: Vec<u8>,
+) -> Result<(), String> {
+    use std::path::Path;
+    let target_file = Path::new(&game_dir).join(&relative_path);
+    if let Some(parent) = target_file.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&target_file, data).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn finalize_game_installation_command(
+    game_dir: String,
+    game_id: i32,
+    game_title: String,
+) -> Result<(), String> {
+    use std::path::Path;
+    let target_dir = Path::new(&game_dir);
+    std::fs::create_dir_all(target_dir).map_err(|e| e.to_string())?;
+    
+    let meta = serde_json::json!({
+        "id": game_id,
+        "title": game_title,
+    });
+    let meta_path = target_dir.join("sh_meta.json");
+    let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    std::fs::write(&meta_path, meta_json).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ============================================================
 // Game Launch Commands
 // ============================================================
@@ -162,6 +197,8 @@ pub fn run() {
             prepare_install_command,
             install_game_command,
             get_install_size_command,
+            save_game_file_command,
+            finalize_game_installation_command,
             // Launch commands
             launch_game_command,
             is_game_running_command,
